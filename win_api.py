@@ -16,6 +16,18 @@ MOUSEEVENTF_RIGHTUP = 0x0010
 MOUSEEVENTF_MIDDLEDOWN = 0x0020
 MOUSEEVENTF_MIDDLEUP = 0x0040
 
+WM_LBUTTONDOWN = 0x0201
+WM_LBUTTONUP = 0x0202
+WM_LBUTTONDBLCLK = 0x0203
+WM_RBUTTONDOWN = 0x0204
+WM_RBUTTONUP = 0x0205
+WM_MBUTTONDOWN = 0x0207
+WM_MBUTTONUP = 0x0208
+
+MK_LBUTTON = 0x0001
+MK_RBUTTON = 0x0002
+MK_MBUTTON = 0x0010
+
 # GDI相关常量
 SRCCOPY = 0x00CC0020
 DIB_RGB_COLORS = 0
@@ -97,7 +109,6 @@ kernel32.VirtualProtectEx.argtypes = [
 ]
 kernel32.VirtualProtectEx.restype = wintypes.BOOL
 
-# ========== Psapi DLL 函数定义 ==========
 # 模块枚举
 psapi.EnumProcessModules.argtypes = [
     wintypes.HANDLE,
