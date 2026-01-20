@@ -2,7 +2,6 @@ from win_api import *
 from PIL import Image
 import time
 
-
 def capture_window_to_pil(hwnd):
     rect = wintypes.RECT()
     if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
@@ -126,9 +125,6 @@ def get_grid_centers(hwnd, rows, cols):
     return None
 
 def send_mouse_click(hwnd, x, y, click_type="left", restore_cursor=False, delay=0.05):
-    user32.SetForegroundWindow(hwnd)
-    time.sleep(0.05)
-
     old_pos = POINT()
     user32.GetCursorPos(ctypes.byref(old_pos))
     
@@ -163,3 +159,45 @@ def send_mouse_click(hwnd, x, y, click_type="left", restore_cursor=False, delay=
     time.sleep(delay)
     if restore_cursor:
         user32.SetCursorPos(old_pos.x, old_pos.y)
+
+
+def MAKELONG(low, high):
+   return (high << 16) | (low & 0xFFFF)
+
+def send_click_message(hwnd, x, y, click_type='left', delay=0.02):
+    rect = wintypes.RECT()
+    user32.GetWindowRect(hwnd, ctypes.byref(rect))
+   
+    screen_x = rect.left + x
+    screen_y = rect.top + y
+
+    user32.SetCursorPos(screen_x, screen_y)
+
+    screen_point = POINT(screen_x, screen_y)
+    user32.ScreenToClient(hwnd, ctypes.byref(screen_point))
+
+    lparam = MAKELONG(screen_point.x, screen_point.y)
+
+    click_type = click_type.lower()
+    if click_type == 'left':
+       user32.SendMessageW(hwnd, WM_LBUTTONDOWN, MK_LBUTTON, lparam)
+       user32.SendMessageW(hwnd, WM_LBUTTONUP, 0, lparam)
+       
+    elif click_type == 'right':
+       user32.SendMessageW(hwnd, WM_RBUTTONDOWN, MK_RBUTTON, lparam)
+       user32.SendMessageW(hwnd, WM_RBUTTONUP, 0, lparam)
+       
+    elif click_type == 'middle':
+       user32.SendMessageW(hwnd, WM_MBUTTONDOWN, MK_MBUTTON, lparam)
+       user32.SendMessageW(hwnd, WM_MBUTTONUP, 0, lparam)
+       
+    elif click_type == 'double':
+       user32.SendMessageW(hwnd, WM_LBUTTONDOWN, MK_LBUTTON, lparam)
+       user32.SendMessageW(hwnd, WM_LBUTTONUP, 0, lparam)
+       time.sleep(0.03)
+       user32.SendMessageW(hwnd, WM_LBUTTONDBLCLK, MK_LBUTTON, lparam)
+       user32.SendMessageW(hwnd, WM_LBUTTONUP, 0, lparam)
+    else:
+       raise ValueError(f"不支持的点击类型: {click_type}")
+       
+    time.sleep(delay)
