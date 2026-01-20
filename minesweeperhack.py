@@ -4,7 +4,7 @@ import threading
 import pymem.exception
 from win_api import *
 import logging
-from utils import get_grid_centers, send_mouse_click, time
+from utils import get_grid_centers, send_mouse_click, send_click_message, time
 import tkinter as tk
 from tkinter import ttk
 from datetime import datetime
@@ -112,7 +112,7 @@ class MinesweeperHack:
     def _get_mines_position(self):
         return [(row, col) for row, col, _ in self._iter_mines()]
 
-    def _click_all_safe_cells(self):
+    def _click_all_safe_cells(self, message = True):
         coord = None
         while True:
             mines_grid_centers = self._get_mines_grid_centers()
@@ -120,10 +120,13 @@ class MinesweeperHack:
                 coord = self.all_grid_centers[0]
                 idx = self.coord2idx[coord]
                 row, col = divmod(idx, self.width)
-                self._click_with_verify(coord, row, col)
+                if not message:
+                    self._click_with_verify(coord, row, col)
+                else:
+                    send_click_message(self.main_hwnd, *coord)
             else:
                 break
-            time.sleep(0.1)
+            time.sleep(0.02)
 
         mines_set = set(mines_grid_centers)
         width = self.width
@@ -138,85 +141,102 @@ class MinesweeperHack:
 
         safe_first = self._get_safe_cells(need_set, mines_set)
         
-        for coord in safe_first:
-            idx = self.coord2idx[coord]
-            row, col = divmod(idx, width)
-            if self._read_status(row, col, status_base_offset, status_offsets) == 9:
-                self._click_with_verify(coord, row, col)
-            need_set.discard(coord)
-
-        status_read_set = set()
-
-        for coord in list(need_set):
-            idx = self.coord2idx[coord]
-            row, col = divmod(idx, width)
-            current_status = self._read_status(row, col, status_base_offset, status_offsets)
-            
-            if current_status >= 9:
-                if current_status > 9:
+        for round_num in range(3):
+            for coord in tuple(safe_first):
+                idx = self.coord2idx[coord]
+                row, col = divmod(idx, width)
+                if self._read_status(row, col, status_base_offset, status_offsets) == 9:
+                    if not message:
+                        self._click_with_verify(coord, row, col)
+                    else:
+                        send_click_message(self.main_hwnd, *coord)
+                else:
+                    safe_first.discard(coord)
                     need_set.discard(coord)
-                continue
+                if len(safe_first) == 0:
+                    break
 
-            neighbors = self._get_neighbors_by_index(coord)
-            
-            mine_neighbors = mines_set & neighbors
-            mine_neighbors_to_count = mine_neighbors - status_read_set
-            mine_count = len(mine_neighbors_to_count)
-            
-            unopened_neighbors = set()
-            for neighbor_coord in neighbors:
-                if neighbor_coord in status_read_set:
-                    continue
-                    
-                neighbor_idx = self.coord2idx[neighbor_coord]
-                neighbor_row, neighbor_col = divmod(neighbor_idx, width)
-                neighbor_status = self._read_status(neighbor_row, neighbor_col, status_base_offset, status_offsets)
+        if not message:
+            status_read_set = set()
+
+            for coord in list(need_set):
+                idx = self.coord2idx[coord]
+                row, col = divmod(idx, width)
+                current_status = self._read_status(row, col, status_base_offset, status_offsets)
                 
-                if neighbor_status == 9:
-                    unopened_neighbors.add(neighbor_coord)
-            
-            unopened_count = len(unopened_neighbors)
-            unopened_non_mine_count = unopened_count - mine_count
-            
-            if unopened_non_mine_count == 0:
+                if current_status >= 9:
+                    if current_status > 9:
+                        need_set.discard(coord)
+                    continue
+
+                neighbors = self._get_neighbors_by_index(coord)
+                
+                mine_neighbors = mines_set & neighbors
+                mine_neighbors_to_count = mine_neighbors - status_read_set
+                mine_count = len(mine_neighbors_to_count)
+                
+                unopened_neighbors = set()
+                for neighbor_coord in neighbors:
+                    if neighbor_coord in status_read_set:
+                        continue
+                        
+                    neighbor_idx = self.coord2idx[neighbor_coord]
+                    neighbor_row, neighbor_col = divmod(neighbor_idx, width)
+                    neighbor_status = self._read_status(neighbor_row, neighbor_col, status_base_offset, status_offsets)
+                    
+                    if neighbor_status == 9:
+                        unopened_neighbors.add(neighbor_coord)
+                
+                unopened_count = len(unopened_neighbors)
+                unopened_non_mine_count = unopened_count - mine_count
+                
+                if unopened_non_mine_count == 0:
+                    status_read_set.add(coord)
+                    need_set.discard(coord)
+                    continue
+                
+                if mine_count + 1 < unopened_non_mine_count:
+                    for mine_coord in mine_neighbors_to_count:
+                        mine_idx = self.coord2idx[mine_coord]
+                        mine_row, mine_col = divmod(mine_idx, width)
+                        self._click_with_verify(mine_coord, mine_row, mine_col, "right")
+                        status_read_set.add(mine_coord)
+                    
+                    send_mouse_click(self.main_hwnd, *coord, "middle")
+                    for unopened_neighbor_coord in unopened_neighbors: 
+                        unopened_neighbors_idx = self.coord2idx[unopened_neighbor_coord] 
+                        unopened_neighbors_row, unopened_neighbors_col = divmod(unopened_neighbors_idx, width) 
+                        unopened_neighbor_status = self._read_status(unopened_neighbors_row, unopened_neighbors_col, status_base_offset, status_offsets) 
+                        if unopened_neighbor_status == 9:
+                            send_mouse_click(self.main_hwnd, *coord, "middle")
+                    
+                    for unopened_neighbor_coord in unopened_neighbors:
+                        need_set.discard(unopened_neighbor_coord)
+                else:
+                    unopened_safe = unopened_neighbors - mine_neighbors_to_count
+                    for safe_coord in unopened_safe:
+                        safe_idx = self.coord2idx[safe_coord]
+                        safe_row, safe_col = divmod(safe_idx, width)
+                        self._click_with_verify(safe_coord, safe_row, safe_col)
+                        need_set.discard(safe_coord)
+                
                 status_read_set.add(coord)
                 need_set.discard(coord)
-                continue
-            
-            if mine_count + 1 < unopened_non_mine_count:
-                for mine_coord in mine_neighbors_to_count:
-                    mine_idx = self.coord2idx[mine_coord]
-                    mine_row, mine_col = divmod(mine_idx, width)
-                    self._click_with_verify(mine_coord, mine_row, mine_col, "right")
-                    status_read_set.add(mine_coord)
                 
-                send_mouse_click(self.main_hwnd, *coord, "middle")
-                for unopened_neighbor_coord in unopened_neighbors: 
-                    unopened_neighbors_idx = self.coord2idx[unopened_neighbor_coord] 
-                    unopened_neighbors_row, unopened_neighbors_col = divmod(unopened_neighbors_idx, width) 
-                    unopened_neighbor_status = self._read_status(unopened_neighbors_row, unopened_neighbors_col, status_base_offset, status_offsets) 
-                    if unopened_neighbor_status == 9:
-                        send_mouse_click(self.main_hwnd, *coord, "middle")
                 
-                for unopened_neighbor_coord in unopened_neighbors:
-                    need_set.discard(unopened_neighbor_coord)
-            else:
-                unopened_safe = unopened_neighbors - mine_neighbors_to_count
-                for safe_coord in unopened_safe:
-                    safe_idx = self.coord2idx[safe_coord]
-                    safe_row, safe_col = divmod(safe_idx, width)
-                    self._click_with_verify(safe_coord, safe_row, safe_col)
-                    need_set.discard(safe_coord)
-            
-            status_read_set.add(coord)
-            need_set.discard(coord)
-
-        for coord in tuple(need_set):
-            idx = self.coord2idx[coord]
-            row, col = divmod(idx, width)
-            if self._read_status(row, col, status_base_offset, status_offsets) == 9:
-                self._click_with_verify(coord, row, col)
-
+        for round_num in range(3):
+            for coord in tuple(need_set):
+                idx = self.coord2idx[coord]
+                row, col = divmod(idx, width)
+                if self._read_status(row, col, status_base_offset, status_offsets) == 9:
+                    if not message:
+                        self._click_with_verify(coord, row, col)
+                    else:
+                        send_click_message(self.main_hwnd, *coord)
+                else:
+                    need_set.discard(coord)
+                if len(need_set) == 0:
+                    break
         return True
 
     def _get_safe_cells(self, need_set, mines_set):
@@ -356,12 +376,12 @@ class MinesweeperHack:
         self._monitor_thread_stop_event.set()
         self._monitor_thread = None
         
-    def auto_click(self):
+    def auto_click(self, message=False):
         hwnds = self.editor.get_hwnds()
         if sum(hwnd.get('is_enabled') is True for hwnd in hwnds) != 1 or next((hwnd for hwnd in hwnds if hwnd.get('title') == '扫雷'), {}).get('is_enabled') is False:
             return
         self._get_all_grid_data()
-        return self._click_all_safe_cells()
+        return self._click_all_safe_cells(message)
         
     def remove_restrictions(self):
         if not self._restrictions_backend or not self._restrictions_plus_backend:
@@ -466,7 +486,6 @@ class MinesweeperHack:
 
         shellcode = bytearray([0x48, 0x83, 0xEC, 0x28])
 
-        # ==================== 1.1 保存非易失寄存器 ====================
         shellcode.extend([
             0x41, 0x54,                                 # push r12
             0x41, 0x55,                                 # push r13
@@ -476,13 +495,11 @@ class MinesweeperHack:
             0x57,                                       # push rdi
         ])
 
-        # ==================== 2. 加载参数 ====================
         shellcode.extend([
             0x48, 0xB9,                                 # mov rcx, imm64
         ])
         shellcode += struct.pack('<Q', rcx_value_addr)
 
-        # ==================== 3. 保存基地址 ====================
         shellcode.extend([
             0x49, 0x89, 0xCC,                          # mov r12, rcx
         ])
@@ -528,7 +545,6 @@ class MinesweeperHack:
             0x0F, 0x8D, 0x00, 0x00, 0x00, 0x00,  # jge done
         ])
 
-        # 读取坐标
         shellcode.extend([
             0x48, 0xC1, 0xE7, 0x03,        # shl rdi, 3
             0x8B, 0x4C, 0x3E, 0x04,        # mov ecx, [rsi+rdi+4]
@@ -536,7 +552,6 @@ class MinesweeperHack:
             0x48, 0xC1, 0xEF, 0x03,        # shr rdi, 3
         ])
 
-        # 处理坐标
         shellcode.extend([
             0x4D, 0x89, 0xE7,                          # mov r15, r12
             0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
@@ -559,7 +574,7 @@ class MinesweeperHack:
 
         jne_skip_pos = len(shellcode)
         shellcode.extend([
-            0x0F, 0x85, 0x00, 0x00, 0x00, 0x00,       # jne loop_continue (6字节)
+            0x0F, 0x85, 0x00, 0x00, 0x00, 0x00,       # jne loop_continue
         ])
 
         shellcode.extend([
@@ -637,19 +652,16 @@ class MinesweeperHack:
         ])
 
 
-        # ==================== 4. 外层循环（r13 = row） ====================
         shellcode.extend([
             0x4D, 0x31, 0xED,                          # xor r13, r13
         ])
         outer_loop_offset = len(shellcode)
 
-        # ==================== 5. 内层循环（r14 = col） ====================
         shellcode.extend([
             0x4D, 0x31, 0xF6,                          # xor r14, r14
         ])
         inner_loop_offset = len(shellcode)
 
-        # ==================== 6. 地址计算 ====================
         shellcode.extend([
             0x4D, 0x89, 0xE7,                          # mov r15, r12
             0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
@@ -713,8 +725,6 @@ class MinesweeperHack:
             0x4F, 0x8D, 0x3C, 0xEF,                    # lea r15, [r15 + r13*8]
             0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
         ])
-
-        # ==================== 7. 调用 target_function ====================
         shellcode.extend([
             0x49, 0xBB,                         # mov r11, imm64
         ])
@@ -736,11 +746,9 @@ class MinesweeperHack:
             0xFF, 0xD0,                                # call rax
             0x48, 0x83, 0xC4, 0x20,                    # add rsp, 0x20
         ])
-
-        # ==================== 8. 调用 Sleep====================
         shellcode.extend([
             0x48, 0x83, 0xEC, 0x20,                    # sub rsp, 0x20
-            0x48, 0xC7, 0xC1, 0x32, 0x00, 0x00, 0x00,  # mov rcx, 50
+            0x48, 0xC7, 0xC1, 0x14, 0x00, 0x00, 0x00,  # mov rcx, 20
             0x48, 0xB8,                                # mov rax, sleep
         ])
         shellcode += struct.pack('<Q', sleep_addr)
@@ -753,8 +761,6 @@ class MinesweeperHack:
 
         jne_rel = inner_continue_target - (jne_to_continue_pos + 6)
         struct.pack_into('<i', shellcode, jne_to_continue_pos + 2, jne_rel)
-
-        # ==================== 9. 内层循环控制 ====================
         shellcode.extend([
             0x49, 0xFF, 0xC6,                          # inc r14
             0x49, 0x83, 0xFE, self.width & 0xFF
@@ -762,8 +768,6 @@ class MinesweeperHack:
         inner_jump_offset = inner_loop_offset - (len(shellcode) + 6)
         shellcode.extend([0x0F, 0x82])
         shellcode += struct.pack('<i', inner_jump_offset)
-
-        # ==================== 10. 外层循环控制 ====================
         shellcode.extend([
             0x49, 0xFF, 0xC5,                          # inc r13
             0x49, 0x83, 0xFD, self.height & 0xFF
@@ -771,8 +775,6 @@ class MinesweeperHack:
         outer_jump_offset = outer_loop_offset - (len(shellcode) + 6)
         shellcode.extend([0x0F, 0x82])
         shellcode += struct.pack('<i', outer_jump_offset)
-
-        # ==================== 11. 恢复寄存器并返回 ====================
         shellcode.extend([
             0x41, 0x5F,                                # pop r15
             0x41, 0x5E,                                # pop r14
