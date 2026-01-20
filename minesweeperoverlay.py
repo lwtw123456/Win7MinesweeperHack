@@ -1,9 +1,6 @@
 import tkinter as tk
 from win_api import *
 
-# =========================
-# Overlay app
-# =========================
 class MinesweeperOverlay:
     def __init__(self, master, hwnd):
 
