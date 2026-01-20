@@ -6,8 +6,7 @@ class ControlWindowUi(tk.Tk):
     """主界面"""
     def __init__(self):
         super().__init__()
-        self.title("Win7版64位《扫雷》九项修改器")
-        # 稍微增加窗口宽度以适应更多控件
+        self.title("Win7版64位《扫雷》十项修改器")
         self.geometry("650x400")
         self.resizable(width=False, height=False)
         self._center_window()
@@ -15,7 +14,6 @@ class ControlWindowUi(tk.Tk):
         self.font_normal = ("微软雅黑", 10)
         self.switch_vars = {}
         
-        # 注册验证命令
         vcmd = (self.register(self._validate_time_input), '%P')
         
         self._create_widgets(vcmd)
@@ -86,11 +84,14 @@ class ControlWindowUi(tk.Tk):
         btn2 = ttk.Button(frame_button, text="显示雷区", command=self.show_mines_native, width=12)
         btn2.grid(row=0, column=2, padx=5, pady=8, sticky="w")
 
-        btn2 = ttk.Button(frame_button, text="自动游戏(模拟鼠标)", command=self.auto_win, width=18)
+        btn2 = ttk.Button(frame_button, text="自动游戏(input)", command=self.auto_win, width=12)
         btn2.grid(row=0, column=3, padx=5, pady=8, sticky="w")
-        
-        btn3 = ttk.Button(frame_button, text="自动游戏(内存模式)", command=self.auto_win_quick, width=18)
+
+        btn3 = ttk.Button(frame_button, text="自动游戏(send)", command=self.auto_win_message, width=12)
         btn3.grid(row=0, column=4, padx=5, pady=8, sticky="w")
+
+        btn4 = ttk.Button(frame_button, text="自动游戏(call)", command=self.auto_win_quick, width=12)
+        btn4.grid(row=0, column=5, padx=5, pady=8, sticky="w")
 
         frame_log = ttk.LabelFrame(self, text="运行日志区")
         frame_log.pack(padx=15, pady=(0, 15), fill="both", expand=True)
@@ -143,4 +144,7 @@ class ControlWindowUi(tk.Tk):
         pass
     
     def auto_win_quick(self):
+        pass
+    
+    def auto_win_message(self):
         pass
