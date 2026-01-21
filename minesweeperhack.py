@@ -39,9 +39,6 @@ class MinesweeperHack:
             "restrictions":("0F 44 D5 01 69 0C", "90 90 90 01 69 0C"),
             "restrictions_plus":("45 39 7D 08 74 40 48 8D 54 24 30", "45 39 7D 08 90 90 48 8D 54 24 30")
         }
-        self.patterns = {
-            "win": "75 0C 48 8B 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 8D 15 ?? ?? ?? ?? 45 8B C6 B9 00 00 00 01 E8 ?? ?? ?? ?? 48 8B 3D",
-        }
         self._invincible_backend = None
         self._invincible_plus_backend = None
         self._click_equal_win_backend = None
@@ -790,3 +787,4 @@ class MinesweeperHack:
         struct.pack_into('<i', shellcode, je_offset_pos + 2, rel)
         self.editor.inject_shellcode(shellcode)
         return True
+
