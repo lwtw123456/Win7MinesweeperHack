@@ -25,6 +25,9 @@ class MinesweeperHack:
             'mine': (0x000AAA38, [0x18, 0x58, 0x10, 0x0, 0x10, 0x0]),
             'status':(0x000AAA38, [0x18, 0x50, 0x10, 0x0, 0x10, 0x0]),
             'show_mine_rcx': (0xAAA38, [0x10]),
+            'force_reveal_flag': (0xAAA38, [0x10, 0x40]),
+            'should_refresh': (0xAAA38, [0x10, 0x114]),
+            'engine_state': (0xAAA38, [0x38]),
             'show_mine_func': (0x32104, []),
             'click_rcx':(0xAAA38, []),
             'click_rdx':(0xAAB48, []),
@@ -400,13 +403,15 @@ class MinesweeperHack:
         if not self._is_game_started():
             return
         else:
+            final_address = self.editor.calculate_pointer_chain(*self.paths["force_reveal_flag"])
+            self.editor.write_value(final_address, 1, "int")
+            final_address = self.editor.calculate_pointer_chain(*self.paths["should_refresh"])
+            self.editor.write_value(final_address, 1, "int")
             rcx_value_addr = self.editor.read_value(self.editor.calculate_pointer_chain(*self.paths["show_mine_rcx"]), "int")
             target_function_addr = self.editor.calculate_pointer_chain(*self.paths["show_mine_func"])
             shellcode = bytearray([0x48, 0x83, 0xEC, 0x28])
             shellcode.extend([0x48, 0xB9])
             shellcode += struct.pack('<Q', rcx_value_addr)
-            shellcode.extend([0xC6, 0x41, 0x40, 0x01])
-            shellcode.extend([0xC6, 0x81, 0x14, 0x01, 0x00, 0x00, 0x01])
             shellcode.extend([0x48, 0x83, 0xEC, 0x20])
             shellcode.extend([0x48, 0xB8])
             shellcode += struct.pack('<Q', target_function_addr)
@@ -787,4 +792,5 @@ class MinesweeperHack:
         struct.pack_into('<i', shellcode, je_offset_pos + 2, rel)
         self.editor.inject_shellcode(shellcode)
         return True
+
 
