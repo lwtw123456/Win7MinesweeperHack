@@ -49,8 +49,8 @@ def detect_game_region(img: Image.Image):
     BIN_THRESH = 85
     MIN_CONTINUOUS = 100
     
-    scan_start_x = int(width * 0.02)
-    scan_start_y = int(height * 0.02)
+    scan_start_x = int(width * 0.05)
+    scan_start_y = int(height * 0.05)
 
     game_left = 0
     game_top = 0
@@ -201,3 +201,4 @@ def send_click_message(hwnd, x, y, click_type='left', delay=0.02):
        raise ValueError(f"不支持的点击类型: {click_type}")
        
     time.sleep(delay)
+
