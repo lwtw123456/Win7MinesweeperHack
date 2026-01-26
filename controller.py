@@ -76,8 +76,10 @@ class ControlWindow(ControlWindowUi):
         if is_on:
             self.log_info(f"❌️ 请先关闭点击即赢功能")
             return
-        self.hack.auto_click()
-        self.log_info(f"🤖 自动游戏（input）已完成")
+        if not self.hack.auto_click():
+            self.log_info(f"❌️ 请先开始游戏")
+        else:
+            self.log_info(f"🤖 自动游戏（input）已完成")
     
     def lift_restrictions(self):
         is_on = self.switch_vars['允许0秒记录'].get()
@@ -106,8 +108,10 @@ class ControlWindow(ControlWindowUi):
         if is_on:
             self.log_info(f"❌️ 请先关闭点击即赢功能")
             return
-        self.hack.auto_click(True)
-        self.log_info(f"🤖 自动游戏（send）已完成")
+        if not self.hack.auto_click(True):
+            self.log_info(f"❌️ 请先开始游戏")
+        else:
+            self.log_info(f"🤖 自动游戏（send）已完成")
         
 if __name__ == "__main__":
     app = ControlWindow()
