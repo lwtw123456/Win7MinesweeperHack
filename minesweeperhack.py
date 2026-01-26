@@ -40,7 +40,12 @@ class MinesweeperHack:
             "invincible_plus": ("44 88 A3 88 00 00 00 E9", "90 90 90 90 90 90 90 E9"),
             "freeze_time": ("48 8B 41 18 F3 0F 10 40 20 F3 0F 58 05 ?? ?? ?? ?? F3 0F 11 40 20", "48 8B 41 18 F3 0F 10 40 20 90 90 90 90 90 90 90 90 F3 0F 11 40 20"),
             "restrictions":("0F 44 D5 01 69 0C", "90 90 90 01 69 0C"),
-            "restrictions_plus":("45 39 7D 08 74 40 48 8D 54 24 30", "45 39 7D 08 90 90 48 8D 54 24 30")
+            "restrictions_plus":("45 39 7D 08 74 40 48 8D 54 24 30", "45 39 7D 08 90 90 48 8D 54 24 30"),
+            "click_perfect_1": ("75 0A 3B E8 0F 84 B6 02 00 00 FF C3", "FF C3 90 90 90 90 90 90 90 90 90 90"),
+            "click_perfect_2": ("83 FE 0C 0F 85 DF 01 00 00", "83 FE 0C 90 90 90 90 90 90"),
+            "click_perfect_3": ("83 F8 0A 0F 84 AB 00 00 00 83 F8 0B", "83 F8 0A 0F 84 93 02 00 00 83 F8 0B"),
+            "click_perfect_4": ("40 38 3C 0E 75 1E", "40 38 3C 0E 90 90"),
+            "click_perfect_patch":("48 8B 47 50 48 8B 48 10 4A 8B 04 E1", bytearray([0xE9]))
         }
         self._invincible_backend = None
         self._invincible_plus_backend = None
@@ -48,6 +53,7 @@ class MinesweeperHack:
         self._freeze_time_backend = None
         self._restrictions_backend = None
         self._restrictions_plus_backend = None
+        self._click_perfect_shellcode_addr = None
         self._monitor_thread = None
         self._monitor_thread_stop_event = threading.Event()
         self._click_equal_win_thread = None
@@ -399,6 +405,9 @@ class MinesweeperHack:
         self._restrictions_plus_backend = None
         
     def find_mines_native(self):
+        final_address = self.editor.calculate_pointer_chain(*self.paths["engine_state"])
+        if self.editor.read_value(final_address, "int") != 1:
+            return
         self._get_all_grid_data()
         if not self._is_game_started():
             return
@@ -415,7 +424,7 @@ class MinesweeperHack:
             shellcode += struct.pack('<Q', target_function_addr)
             shellcode.extend([0xFF, 0xD0])
             shellcode.extend([0x48, 0x83, 0xC4, 0x20])
-            shellcode.extend([0x48, 0x83, 0xC4, 0x28,0xC3])
+            shellcode.extend([0x48, 0x83, 0xC4, 0x28, 0xC3])
             self.editor.inject_shellcode(shellcode)
             return True
             
@@ -433,20 +442,16 @@ class MinesweeperHack:
                 first_click_rdx = self.editor.calculate_pointer_chain(*self.paths["first_click_rdx"])
                 shellcode = bytearray([0x48, 0x83, 0xEC, 0x28])
                 shellcode.extend([
-                    0x48, 0xB9,                                 # mov rcx, imm64
+                    0x48, 0xB9,                                # mov rcx, imm64
                 ])
                 shellcode += struct.pack('<Q', rcx_value_addr)
                 shellcode.extend([
                     0x49, 0x89, 0xCC,                          # mov r12, rcx
-                ])
-                shellcode.extend([
                     0x4D, 0x89, 0xE7,                          # mov r15, r12
                     0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
                     0x49, 0x83, 0xC7, 0x29,                    # add r15, 0x29
-                    0x41, 0xC6, 0x07, 0x00                     # mov byte ptr [r15], 0x00
-                ])
-                shellcode.extend([
-                    0x48, 0xBA,                                 # mov rdx, imm64
+                    0x41, 0xC6, 0x07, 0x00,                    # mov byte ptr [r15], 0x00
+                    0x48, 0xBA,                                # mov rdx, imm64
                 ])
                 shellcode += struct.pack('<Q', first_click_rdx)
                 shellcode.extend([
@@ -458,15 +463,13 @@ class MinesweeperHack:
                 shellcode.extend([
                     0xFF, 0xD0,                                # call rax
                     0x48, 0x83, 0xC4, 0x20,                    # add rsp, 0x20
-                ])
-                shellcode.extend([
                     0x48, 0x83, 0xC4, 0x28,                    # add rsp, 0x28
                     0xC3,                                      # ret
                 ])
                 self.editor.inject_shellcode(shellcode)
             else:
                 break
-            time.sleep(0.1)
+            time.sleep(0.02)
             
         mines_set = set(mines_grid_centers)
         need_set = set(self.all_grid_centers) - mines_set
@@ -490,72 +493,47 @@ class MinesweeperHack:
         shellcode = bytearray([0x48, 0x83, 0xEC, 0x28])
 
         shellcode.extend([
-            0x41, 0x54,                                 # push r12
-            0x41, 0x55,                                 # push r13
-            0x41, 0x56,                                 # push r14
-            0x41, 0x57,                                 # push r15
-            0x56,                                       # push rsi
-            0x57,                                       # push rdi
-        ])
-
-        shellcode.extend([
-            0x48, 0xB9,                                 # mov rcx, imm64
+            0x48, 0xB9,                                # mov rcx, imm64
         ])
         shellcode += struct.pack('<Q', rcx_value_addr)
 
         shellcode.extend([
             0x49, 0x89, 0xCC,                          # mov r12, rcx
-        ])
-
-        shellcode.extend([
-            0x48, 0xB9,                                 # mov rcx, imm64
+            0x48, 0xB9,                                # mov rcx, imm64
         ])
         shellcode += struct.pack('<Q', coords_address)
         shellcode.extend([
-            0x48, 0x89, 0xCE,               # mov rsi, rcx 
-            0x8B, 0x1E,                     # mov ebx, [rsi]
-            0x48, 0x83, 0xC6, 0x04,         # add rsi, 4
-        ])
-
-        shellcode.extend([
-            0x85, 0xDB,                     # test ebx, ebx
+            0x48, 0x89, 0xCE,                          # mov rsi, rcx 
+            0x8B, 0x1E,                                # mov ebx, [rsi]
+            0x48, 0x83, 0xC6, 0x04,                    # add rsi, 4
+            0x85, 0xDB,                                # test ebx, ebx
         ])
 
         jz_early_exit_pos = len(shellcode)
         shellcode.extend([
-            0x0F, 0x84, 0x00, 0x00, 0x00, 0x00,  # jz done
-        ])
-        
-        shellcode.extend([
+            0x0F, 0x84, 0x00, 0x00, 0x00, 0x00,        # jz done
             0x4D, 0x89, 0xE7,                          # mov r15, r12
             0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
             0x49, 0x83, 0xC7, 0x29,                    # add r15, 0x29
-            0x41, 0xC6, 0x07, 0x00                     # mov byte ptr [r15], 0x00
-        ])
-
-        shellcode.extend([
-            0x31, 0xFF,                     # xor edi, edi
+            0x41, 0xC6, 0x07, 0x00,                    # mov byte ptr [r15], 0x00
+            0x31, 0xFF,                                # xor edi, edi
         ])
 
         loop_start = len(shellcode)
-
         shellcode.extend([
-            0x39, 0xDF,                     # cmp edi, ebx
+            0x39, 0xDF,                                # cmp edi, ebx
         ])
 
         jge_pos = len(shellcode)
         shellcode.extend([
-            0x0F, 0x8D, 0x00, 0x00, 0x00, 0x00,  # jge done
+            0x0F, 0x8D, 0x00, 0x00, 0x00, 0x00,        # jge done
         ])
 
         shellcode.extend([
-            0x48, 0xC1, 0xE7, 0x03,        # shl rdi, 3
-            0x8B, 0x4C, 0x3E, 0x04,        # mov ecx, [rsi+rdi+4]
-            0x8B, 0x14, 0x3E,              # mov edx, [rsi+rdi]
-            0x48, 0xC1, 0xEF, 0x03,        # shr rdi, 3
-        ])
-
-        shellcode.extend([
+            0x48, 0xC1, 0xE7, 0x03,                    # shl rdi, 3
+            0x8B, 0x4C, 0x3E, 0x04,                    # mov ecx, [rsi+rdi+4]
+            0x8B, 0x14, 0x3E,                          # mov edx, [rsi+rdi]
+            0x48, 0xC1, 0xEF, 0x03,                    # shr rdi, 3
             0x4D, 0x89, 0xE7,                          # mov r15, r12
             0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
             0x49, 0x83, 0xC7, 0x18,                    # add r15, 0x18
@@ -569,18 +547,12 @@ class MinesweeperHack:
             0x49, 0x83, 0xC7, 0x10,                    # add r15, 0x10
             0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
             0x4D, 0x8D, 0x3C, 0x97,                    # lea r15, [r15+rdx*4]
-        ])
-
-        shellcode.extend([
             0x41, 0x80, 0x3F, 0x09                     # cmp byte ptr [r15], 9
         ])
 
         jne_skip_pos = len(shellcode)
         shellcode.extend([
-            0x0F, 0x85, 0x00, 0x00, 0x00, 0x00,       # jne loop_continue
-        ])
-
-        shellcode.extend([
+            0x0F, 0x85, 0x00, 0x00, 0x00, 0x00,        # jne loop_continue
             0x4D, 0x89, 0xE7,                          # mov r15, r12
             0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
             0x49, 0x83, 0xC7, 0x10,                    # add r15, 0x10
@@ -593,10 +565,7 @@ class MinesweeperHack:
             0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
             0x4D, 0x8D, 0x3C, 0xD7,                    # lea r15, [r15+rdx*8]
             0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
-        ])
-
-        shellcode.extend([
-            0x49, 0xBB,                         # mov r11, imm64
+            0x49, 0xBB,                                # mov r11, imm64
         ])
 
         shellcode += struct.pack('<Q', rdx_value_addr)
@@ -613,9 +582,6 @@ class MinesweeperHack:
         shellcode.extend([
             0xFF, 0xD0,                                # call rax
             0x48, 0x83, 0xC4, 0x40,                    # add rsp, 0x40
-        ])
-
-        shellcode.extend([
             0x48, 0x83, 0xEC, 0x20,                    # sub rsp, 0x20
             0x48, 0xC7, 0xC1, 0x64, 0x00, 0x00, 0x00,  # mov rcx, 100
             0x48, 0xB8,                                # mov rax, sleep
@@ -629,7 +595,7 @@ class MinesweeperHack:
         loop_continue_pos = len(shellcode)
 
         shellcode.extend([
-            0xFF, 0xC7,                     # inc edi
+            0xFF, 0xC7,                                # inc edi
         ])
 
         jmp_back_offset = loop_start - (len(shellcode) + 5)
@@ -651,11 +617,7 @@ class MinesweeperHack:
             0x4D, 0x89, 0xE7,                          # mov r15, r12
             0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
             0x49, 0x83, 0xC7, 0x29,                    # add r15, 0x29
-            0x41, 0xC6, 0x07, 0x01                     # mov byte ptr [r15], 0x01
-        ])
-
-
-        shellcode.extend([
+            0x41, 0xC6, 0x07, 0x01,                    # mov byte ptr [r15], 0x01
             0x4D, 0x31, 0xED,                          # xor r13, r13
         ])
         outer_loop_offset = len(shellcode)
@@ -679,42 +641,30 @@ class MinesweeperHack:
             0x49, 0x83, 0xC7, 0x10,                    # add r15, 0x10
             0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
             0x4F, 0x8D, 0x3C, 0xAF,                    # lea r15, [r15+r13*4]
-        ])
-
-        shellcode.extend([
-            0x41, 0x80, 0x3F,0x09                # cmp byte ptr [r15], 9
+            0x41, 0x80, 0x3F,0x09                      # cmp byte ptr [r15], 9
         ])
         jne_to_continue_pos = len(shellcode)
         shellcode.extend([
             0x0F, 0x85,                                # jne rel32
-            0x00, 0x00, 0x00, 0x00                     # placeholder
-        ])
-
-        shellcode.extend([
-            0x4D, 0x8B, 0x3C, 0x24,
-            0x49, 0x83, 0xC7, 0x18,
-            0x4D, 0x8B, 0x3F,
-            0x49, 0x83, 0xC7, 0x58,
-            0x4D, 0x8B, 0x3F,
-            0x49, 0x83, 0xC7, 0x10,
-            0x4D, 0x8B, 0x3F,
-            0x4F, 0x8D, 0x3C, 0xF7,
-            0x4D, 0x8B, 0x3F,
-            0x49, 0x83, 0xC7, 0x10,
-            0x4D, 0x8B, 0x3F,
-            0x4D, 0x01, 0xEF,
-        ])
-
-        shellcode.extend([
-            0x41, 0x80, 0x3F, 0x00                          # cmp byte ptr [r15], 0
+            0x00, 0x00, 0x00, 0x00,                    # placeholder
+            0x4D, 0x8B, 0x3C, 0x24,                    # mov r15, [r12]
+            0x49, 0x83, 0xC7, 0x18,                    # add r15, 0x18
+            0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
+            0x49, 0x83, 0xC7, 0x58,                    # add r15, 0x58
+            0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
+            0x49, 0x83, 0xC7, 0x10,                    # add r15, 0x10
+            0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
+            0x4F, 0x8D, 0x3C, 0xF7,                    # lea r15, [r15 + r14 * 8]
+            0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
+            0x49, 0x83, 0xC7, 0x10,                    # add r15, 0x10
+            0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
+            0x4D, 0x01, 0xEF,                          # add r15, r13
+            0x41, 0x80, 0x3F, 0x00                     # cmp byte ptr [r15], 0
         ])
         je_offset_pos = len(shellcode)
         shellcode.extend([
             0x0F, 0x85,                                # jne rel32
-            0x00, 0x00, 0x00, 0x00                     # placeholder
-        ])
-
-        shellcode.extend([
+            0x00, 0x00, 0x00, 0x00,                    # placeholder
             0x4D, 0x89, 0xE7,                          # mov r15, r12
             0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
             0x49, 0x83, 0xC7, 0x10,                    # add r15, 0x10
@@ -727,19 +677,14 @@ class MinesweeperHack:
             0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
             0x4F, 0x8D, 0x3C, 0xEF,                    # lea r15, [r15 + r13*8]
             0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
-        ])
-        shellcode.extend([
-            0x49, 0xBB,                         # mov r11, imm64
+            0x49, 0xBB,                                # mov r11, imm64
         ])
         
         shellcode += struct.pack('<Q', rdx_value_addr)
 
         shellcode.extend([
-            0x4D, 0x89, 0x3B,                   # mov [r11], r15
-            0x49, 0x8B, 0x13,                   # mov rdx, [r11]
-        ])
-        
-        shellcode.extend([
+            0x4D, 0x89, 0x3B,                          # mov [r11], r15
+            0x49, 0x8B, 0x13,                          # mov rdx, [r11]
             0x4C, 0x89, 0xE1,                          # mov rcx, r12
             0x48, 0x83, 0xEC, 0x20,                    # sub rsp, 0x20
             0x48, 0xB8,                                # mov rax, imm64
@@ -748,8 +693,6 @@ class MinesweeperHack:
         shellcode.extend([
             0xFF, 0xD0,                                # call rax
             0x48, 0x83, 0xC4, 0x20,                    # add rsp, 0x20
-        ])
-        shellcode.extend([
             0x48, 0x83, 0xEC, 0x20,                    # sub rsp, 0x20
             0x48, 0xC7, 0xC1, 0x14, 0x00, 0x00, 0x00,  # mov rcx, 20
             0x48, 0xB8,                                # mov rax, sleep
@@ -779,12 +722,6 @@ class MinesweeperHack:
         shellcode.extend([0x0F, 0x82])
         shellcode += struct.pack('<i', outer_jump_offset)
         shellcode.extend([
-            0x41, 0x5F,                                # pop r15
-            0x41, 0x5E,                                # pop r14
-            0x41, 0x5D,                                # pop r13
-            0x41, 0x5C,                                # pop r12
-            0x5F,                                      # pop rdi
-            0x5E,                                      # pop rsi
             0x48, 0x83, 0xC4, 0x28,                    # add rsp, 0x28
             0xC3,                                      # ret
         ])
@@ -794,3 +731,114 @@ class MinesweeperHack:
         self.editor.inject_shellcode(shellcode)
         return True
 
+    def win_now(self):
+        final_address = self.editor.calculate_pointer_chain(*self.paths["engine_state"])
+        if self.editor.read_value(final_address, "int") != 1:
+            return
+        self.editor.write_value(final_address, 3, "int")
+        return True
+
+    def ultimate_click(self):
+        final_address = self.editor.calculate_pointer_chain(*self.paths["engine_state"])
+        if self.editor.read_value(final_address, "int") != 1:
+            return
+                
+        click_perfect_1_backend = self.editor.search_and_replace(*self.patterns_replace["click_perfect_1"], replace_all=False, base_only=True)
+        click_perfect_2_backend = self.editor.search_and_replace(*self.patterns_replace["click_perfect_2"], replace_all=False, base_only=True)
+        click_perfect_3_backend = self.editor.search_and_replace(*self.patterns_replace["click_perfect_3"], replace_all=False, base_only=True)
+        click_perfect_4_backend = self.editor.search_and_replace(*self.patterns_replace["click_perfect_3"], replace_all=False, base_only=True)
+        
+        rcx_value_addr = self.editor.calculate_pointer_chain(*self.paths["click_rcx"])
+        
+        patch_address = self.editor.search(self.patterns_replace["click_perfect_patch"][0], False)[0]['address']
+        shellcode = bytearray()
+        
+        shellcode.extend([
+            0x41, 0x57,                         # push r15
+            0x48, 0xB9                          # mov rcx, imm64
+        ])
+        shellcode += struct.pack('<Q', rcx_value_addr)
+
+        shellcode.extend([
+            0x4C, 0x8B, 0xF9,                   # mov r15, rcx
+            0x48, 0x8B, 0x09,                   # mov rcx, [rcx]
+            0x48, 0x83, 0xC1, 0x18,             # add rcx, 0x18
+            0x48, 0x8B, 0x09,                   # mov rcx, [rcx]
+            0x48, 0x83, 0xC1, 0x58,             # add rcx, 0x58
+            0x48, 0x8B, 0x09,                   # mov rcx, [rcx]
+            0x48, 0x83, 0xC1, 0x10,             # add rcx, 0x10
+            0x48, 0x8B, 0x09,                   # mov rcx, [rcx]
+            0x4A, 0x8B, 0x0C, 0xE1,             # mov rcx, [rcx+r12*8]
+            0x48, 0x83, 0xC1, 0x10,             # add rcx, 0x10
+            0x48, 0x8B, 0x09,                   # mov rcx, [rcx]
+            0x48, 0x8D, 0x0C, 0x29,             # lea rcx, [rcx+rbp]
+            0x80, 0x39, 0x00,                   # cmp byte ptr [rcx], 0
+            0x48, 0x8B, 0x47, 0x50,             # mov rax,qword ptr ds:[rdi+50]
+            0x48, 0x8B, 0x48, 0x10,             # mov rcx,qword ptr ds:[rax+10]
+            0x4A, 0x8B, 0x04, 0xE1,             # mov rax,qword ptr ds:[rcx+r12*8]
+            0x48, 0x8B, 0x48, 0x10,             # mov rcx,qword ptr ds:[rax+10]
+            0x74, 0x27,                         # jz 0x27
+            0x83, 0x3c, 0xa9, 0x09,             # cmp dword ptr ds:[rcx+rbp*4],9
+            0x74, 0x07,                         # jz 0x07
+            0xBB, 0x0A, 0x00, 0x00, 0x00,       # mov ebx, 10
+            0xEB, 0x05,                         # jmp 0x05
+            0xBB, 0x0B, 0x00, 0x00, 0x00,       # mov ebx, 11
+            0x4D, 0x8B, 0x3F,                   # mov r15, [r15]
+            0x49, 0x83, 0xC7, 0x10,             # add r15, 0x10
+            0x4D, 0x8B, 0x3F,                   # mov r15, [r15]
+            0x49, 0x83, 0xC7, 0x38,             # add r15, 0x38
+            0x4D, 0x8B, 0x3F,                   # mov r15, [r15]
+            0x41, 0xFF, 0x4F, 0x18,             # dec dword ptr [r15+18]
+            0X41, 0X5f,                         # pop r15
+            0x89, 0x1C, 0xA9                    # mov dword ptr ds:[rcx+rbp*4],ebx
+        ])
+        
+        jmp_offset_pos = len(shellcode)
+        shellcode.extend([
+            0xE9,                               # jmp rel32
+            0x00, 0x00, 0x00, 0x00,             # placeholder
+        ])
+        
+        if not self._click_perfect_shellcode_addr:
+            self._click_perfect_shellcode_addr = self.editor.alloc_near(patch_address, len(shellcode))
+        
+        jmp_offset = (patch_address + 24) - (self._click_perfect_shellcode_addr + jmp_offset_pos + 5)
+        shellcode[jmp_offset_pos + 1:jmp_offset_pos + 5] = struct.pack('<i', jmp_offset)
+        
+        if len(self.patterns_replace["click_perfect_patch"][1]) == 1:
+            rel32 = self._click_perfect_shellcode_addr - (patch_address + 5)
+            self.patterns_replace["click_perfect_patch"] = list(self.patterns_replace["click_perfect_patch"])
+            self.patterns_replace["click_perfect_patch"][1] += struct.pack('<i', rel32)
+            self.patterns_replace["click_perfect_patch"][1].extend([0x90, 0x90, 0x90])
+            self.patterns_replace["click_perfect_patch"] = tuple(self.patterns_replace["click_perfect_patch"])
+        
+        click_perfect_patch_backend = self.editor.search_and_replace(*self.patterns_replace["click_perfect_patch"], replace_all=False, base_only=True)
+        
+        self.editor.write_value(self._click_perfect_shellcode_addr, shellcode, "bytes")
+        
+        self._get_all_grid_data()
+        status_base_offset, status_offsets = self.paths["status"]
+        status_offsets = list(status_offsets)
+        for coord in self.all_grid_centers:
+            idx = self.coord2idx[coord]
+            row, col = divmod(idx, self.width)
+            if self._read_status(row, col, status_base_offset, status_offsets) == 9:
+                while True:
+                    send_click_message(self.main_hwnd, *coord)
+                    if self._read_status(row, col, status_base_offset, status_offsets) != 9:
+                        break
+                        time.sleep(0.1)
+            if self.editor.read_value(final_address, "int") != 1:
+                break
+        
+        for i in click_perfect_1_backend['data']:
+            self.editor.search_and_replace(i['new'], i['original'], replace_all=False, base_only=True)
+        for i in click_perfect_2_backend['data']:
+            self.editor.search_and_replace(i['new'], i['original'], replace_all=False, base_only=True)
+        for i in click_perfect_3_backend['data']:
+            self.editor.search_and_replace(i['new'], i['original'], replace_all=False, base_only=True)
+        for i in click_perfect_4_backend['data']:
+            self.editor.search_and_replace(i['new'], i['original'], replace_all=False, base_only=True)
+        for i in click_perfect_patch_backend['data']:
+            self.editor.search_and_replace(i['new'], i['original'], replace_all=False, base_only=True)
+        return True
