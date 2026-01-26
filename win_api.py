@@ -109,6 +109,16 @@ kernel32.VirtualProtectEx.argtypes = [
 ]
 kernel32.VirtualProtectEx.restype = wintypes.BOOL
 
+kernel32.VirtualAllocEx.restype = ctypes.c_uint64
+kernel32.VirtualAllocEx.argtypes = [
+    wintypes.HANDLE, 
+    ctypes.c_uint64, 
+    ctypes.c_size_t, 
+    wintypes.DWORD, 
+    wintypes.DWORD
+]
+
+# ========== Psapi DLL 函数定义 ==========
 # 模块枚举
 psapi.EnumProcessModules.argtypes = [
     wintypes.HANDLE,
