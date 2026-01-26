@@ -86,7 +86,7 @@ python main.py
 - 特征码扫描（AOB Scan）
 - 内存保护修改（`VirtualProtectEx`）
 - Shellcode 注入 & 远程线程
-- Windows API（User32 / GDI / Kernel32）
+- Windows API（User32 / GDI / Kernel32 / psapi）
 - Tkinter GUI
 - 覆盖窗口（透明 + 穿透）
 - 自动化鼠标控制
