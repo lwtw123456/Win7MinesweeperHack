@@ -121,7 +121,7 @@ class ControlWindow(ControlWindowUi):
         if not self.hack.ultimate_click():
             self.log_info(f"❌️ 请先开始游戏")
         else:
-            self.log_info(f"🤖 自动游戏（msg）已完成")
+            self.log_info(f"🤖 自动游戏（ULT）已完成")
             
     def instant_win(self):
         if not self.hack.win_now():
@@ -129,3 +129,4 @@ class ControlWindow(ControlWindowUi):
         else:
             self.log_info(f"⚡ 直接获胜已完成")
             self.log_info(f"此获胜方式不会更新统计信息")
+
