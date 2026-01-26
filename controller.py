@@ -79,7 +79,7 @@ class ControlWindow(ControlWindowUi):
         if not self.hack.auto_click():
             self.log_info(f"❌️ 请先开始游戏")
         else:
-            self.log_info(f"🤖 自动游戏（input）已完成")
+            self.log_info(f"🤖 自动游戏（SND）已完成")
     
     def lift_restrictions(self):
         is_on = self.switch_vars['允许0秒记录'].get()
@@ -95,13 +95,13 @@ class ControlWindow(ControlWindowUi):
         if not self.hack.find_mines_native():
             self.log_info(f"❌️ 请先开始游戏")
         else:
-            self.log_info(f"🤖 原生雷区已显示")
+            self.log_info(f"💣 原生雷区已显示")
     
     def auto_win_quick(self):
         if not self.hack.auto_click_quick():
             self.log_info(f"❌️ 请先开始游戏")
         else:
-            self.log_info(f"🤖 自动游戏（call）已完成")
+            self.log_info(f"🤖 自动游戏（CALL）已完成")
             
     def auto_win_message(self):
         is_on = self.switch_vars['点击即赢'].get()
@@ -111,8 +111,21 @@ class ControlWindow(ControlWindowUi):
         if not self.hack.auto_click(True):
             self.log_info(f"❌️ 请先开始游戏")
         else:
-            self.log_info(f"🤖 自动游戏（send）已完成")
-        
-if __name__ == "__main__":
-    app = ControlWindow()
-    app.mainloop()
+            self.log_info(f"🤖 自动游戏（MSG）已完成")
+            
+    def auto_win_ultimate(self):
+        is_on = self.switch_vars['点击即赢'].get()
+        if is_on:
+            self.log_info(f"❌️ 请先关闭点击即赢功能")
+            return
+        if not self.hack.ultimate_click():
+            self.log_info(f"❌️ 请先开始游戏")
+        else:
+            self.log_info(f"🤖 自动游戏（msg）已完成")
+            
+    def instant_win(self):
+        if not self.hack.win_now():
+            self.log_info(f"❌️ 请先开始游戏")
+        else:
+            self.log_info(f"⚡ 直接获胜已完成")
+            self.log_info(f"此获胜方式不会更新统计信息")
