@@ -6,8 +6,8 @@ class ControlWindowUi(tk.Tk):
     """主界面"""
     def __init__(self):
         super().__init__()
-        self.title("Win7版64位《扫雷》十项修改器")
-        self.geometry("650x400")
+        self.title("Win7版64位《扫雷》十二项修改器")
+        self.geometry("650x470")
         self.resizable(width=False, height=False)
         self._center_window()
 
@@ -70,28 +70,37 @@ class ControlWindowUi(tk.Tk):
         
         self.time_entry = ttk.Entry(
             frame_button, 
-            width=8, 
+            width=11, 
             font=self.font_normal,
             validate='key',
             validatecommand=vcmd
         )
         self.time_entry.insert(0, "0")
-        self.time_entry.grid(row=0, column=0, padx=(15, 5), pady=8, sticky="w")
+        self.time_entry.grid(row=0, column=0, padx=5, pady=8, sticky="w")
         
         btn1 = ttk.Button(frame_button, text="修改时间", command=self.modify_time, width=12)
         btn1.grid(row=0, column=1, padx=5, pady=8, sticky="w")
+        
+        btn6 = ttk.Button(frame_button, text="直接获胜", command=self.instant_win, width=12)
+        btn6.grid(row=0, column=2, padx=5, pady=8, sticky="w")
 
         btn2 = ttk.Button(frame_button, text="显示雷区", command=self.show_mines_native, width=12)
-        btn2.grid(row=0, column=2, padx=5, pady=8, sticky="w")
+        btn2.grid(row=1, column=0, padx=5, pady=8, sticky="w")
 
-        btn2 = ttk.Button(frame_button, text="自动游戏(input)", command=self.auto_win, width=12)
-        btn2.grid(row=0, column=3, padx=5, pady=8, sticky="w")
+        btn3 = ttk.Button(frame_button, text="自动游戏(SND)", command=self.auto_win, width=12)
+        btn3.grid(row=1, column=1, padx=5, pady=8, sticky="w")
 
-        btn3 = ttk.Button(frame_button, text="自动游戏(send)", command=self.auto_win_message, width=12)
-        btn3.grid(row=0, column=4, padx=5, pady=8, sticky="w")
+        btn4 = ttk.Button(frame_button, text="自动游戏(MSG)", command=self.auto_win_message, width=12)
+        btn4.grid(row=1, column=2, padx=5, pady=8, sticky="w")
+        
+        btn5 = ttk.Button(frame_button, text="自动游戏(ULT)", command=self.auto_win_ultimate, width=12)
+        btn5.grid(row=1, column=3, padx=5, pady=8, sticky="w")
 
-        btn4 = ttk.Button(frame_button, text="自动游戏(call)", command=self.auto_win_quick, width=12)
-        btn4.grid(row=0, column=5, padx=5, pady=8, sticky="w")
+        frame_deprecated = ttk.LabelFrame(self, text="实验功能区")
+        frame_deprecated.pack(padx=15, pady=(5, 10), fill="x")
+        
+        btn7 = ttk.Button(frame_deprecated, text="自动游戏(CALL)", command=self.auto_win_quick, width=12)
+        btn7.grid(row=0, column=0, padx=5, pady=8, sticky="w")
 
         frame_log = ttk.LabelFrame(self, text="运行日志区")
         frame_log.pack(padx=15, pady=(0, 15), fill="both", expand=True)
@@ -108,7 +117,7 @@ class ControlWindowUi(tk.Tk):
         self.txt_log.pack(side="left", fill="both", expand=True, padx=(0, 5), pady=5)
         scroll_log.config(command=self.txt_log.yview)
 
-        self.log_info("✅ 系统就绪，点击对应控件执行操作")
+        self.log_info("✅ 系统就绪,点击对应控件执行操作")
 
     def log_info(self, content):
         current_time = datetime.now().strftime("[%H:%M:%S]")
@@ -147,4 +156,10 @@ class ControlWindowUi(tk.Tk):
         pass
     
     def auto_win_message(self):
+        pass
+        
+    def auto_win_ultimate(self):
+        pass
+    
+    def instant_win(self):
         pass
