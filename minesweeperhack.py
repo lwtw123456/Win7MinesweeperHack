@@ -73,11 +73,11 @@ class MinesweeperHack:
             time.sleep(0.5)
             
     
-    def _monitor_hwnds(self):
+    def _monitor_state(self):
+        final_address = self.editor.calculate_pointer_chain(*self.paths["engine_state"])
         while not self._monitor_thread_stop_event.is_set():
             time.sleep(0.5)
-            hwnds = self.editor.get_hwnds()
-            if sum(hwnd.get('is_enabled') is True for hwnd in hwnds) != 1 or next((d for d in hwnds if d.get('title') == '扫雷'), {}).get('is_enabled') is False:
+            if self.editor.read_value(final_address, "int") != 1:
                 self.put_queue.put(False)
                 break
     
@@ -367,7 +367,7 @@ class MinesweeperHack:
             self.overlay.start(mines_grid_centers, self.put_queue)
             if not self._monitor_thread:
                 self._monitor_thread_stop_event.clear()
-                self._monitor_thread = threading.Thread(target=self._monitor_hwnds, daemon=True)
+                self._monitor_thread = threading.Thread(target=self._monitor_state, daemon=True)
                 self._monitor_thread.start()
             return True
     
@@ -377,8 +377,8 @@ class MinesweeperHack:
         self._monitor_thread = None
         
     def auto_click(self, message=False):
-        hwnds = self.editor.get_hwnds()
-        if sum(hwnd.get('is_enabled') is True for hwnd in hwnds) != 1 or next((hwnd for hwnd in hwnds if hwnd.get('title') == '扫雷'), {}).get('is_enabled') is False:
+        final_address = self.editor.calculate_pointer_chain(*self.paths["engine_state"])
+        if self.editor.read_value(final_address, "int") != 1:
             return
         self._get_all_grid_data()
         return self._click_all_safe_cells(message)
@@ -403,15 +403,13 @@ class MinesweeperHack:
         if not self._is_game_started():
             return
         else:
-            final_address = self.editor.calculate_pointer_chain(*self.paths["force_reveal_flag"])
-            self.editor.write_value(final_address, 1, "int")
-            final_address = self.editor.calculate_pointer_chain(*self.paths["should_refresh"])
-            self.editor.write_value(final_address, 1, "int")
             rcx_value_addr = self.editor.read_value(self.editor.calculate_pointer_chain(*self.paths["show_mine_rcx"]), "int")
             target_function_addr = self.editor.calculate_pointer_chain(*self.paths["show_mine_func"])
             shellcode = bytearray([0x48, 0x83, 0xEC, 0x28])
             shellcode.extend([0x48, 0xB9])
             shellcode += struct.pack('<Q', rcx_value_addr)
+            shellcode.extend([0xC6, 0x41, 0x40, 0x01])
+            shellcode.extend([0xC6, 0x81, 0x14, 0x01, 0x00, 0x00, 0x01])
             shellcode.extend([0x48, 0x83, 0xEC, 0x20])
             shellcode.extend([0x48, 0xB8])
             shellcode += struct.pack('<Q', target_function_addr)
@@ -422,6 +420,9 @@ class MinesweeperHack:
             return True
             
     def auto_click_quick(self):
+        final_address = self.editor.calculate_pointer_chain(*self.paths["engine_state"])
+        if self.editor.read_value(final_address, "int") != 1:
+            return
         self._get_all_grid_data()
         rcx_value_addr = self.editor.calculate_pointer_chain(*self.paths["click_rcx"])
         target_function_addr = self.editor.calculate_pointer_chain(*self.paths["click_func"])
@@ -792,5 +793,4 @@ class MinesweeperHack:
         struct.pack_into('<i', shellcode, je_offset_pos + 2, rel)
         self.editor.inject_shellcode(shellcode)
         return True
-
 
