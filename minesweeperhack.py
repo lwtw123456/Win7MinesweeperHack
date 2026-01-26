@@ -746,7 +746,7 @@ class MinesweeperHack:
         click_perfect_1_backend = self.editor.search_and_replace(*self.patterns_replace["click_perfect_1"], replace_all=False, base_only=True)
         click_perfect_2_backend = self.editor.search_and_replace(*self.patterns_replace["click_perfect_2"], replace_all=False, base_only=True)
         click_perfect_3_backend = self.editor.search_and_replace(*self.patterns_replace["click_perfect_3"], replace_all=False, base_only=True)
-        click_perfect_4_backend = self.editor.search_and_replace(*self.patterns_replace["click_perfect_3"], replace_all=False, base_only=True)
+        click_perfect_4_backend = self.editor.search_and_replace(*self.patterns_replace["click_perfect_4"], replace_all=False, base_only=True)
         
         rcx_value_addr = self.editor.calculate_pointer_chain(*self.paths["click_rcx"])
         
@@ -827,10 +827,10 @@ class MinesweeperHack:
                     send_click_message(self.main_hwnd, *coord)
                     if self._read_status(row, col, status_base_offset, status_offsets) != 9:
                         break
-                        time.sleep(0.1)
+                    time.sleep(0.1)
             if self.editor.read_value(final_address, "int") != 1:
                 break
-        
+
         for i in click_perfect_1_backend['data']:
             self.editor.search_and_replace(i['new'], i['original'], replace_all=False, base_only=True)
         for i in click_perfect_2_backend['data']:
@@ -842,3 +842,4 @@ class MinesweeperHack:
         for i in click_perfect_patch_backend['data']:
             self.editor.search_and_replace(i['new'], i['original'], replace_all=False, base_only=True)
         return True
+
