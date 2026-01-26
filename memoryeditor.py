@@ -447,13 +447,23 @@ class MemoryEditor:
         try:
             address = int(address, 16) if isinstance(address, str) else address
             
-            replacement_list = self.pattern_to_bytes(replacement_hex)
-            replacement_bytes = self.bytes_list_to_bytes(replacement_list)
+            if isinstance(replacement_hex, (bytes, bytearray)):
+                replacement_bytes = bytes(replacement_hex)
+                replacement_hex_str = replacement_bytes.hex().upper()
+                replacement_list = list(replacement_bytes)
+            elif isinstance(replacement_hex, str):
+                replacement_list = self.pattern_to_bytes(replacement_hex)
+                replacement_bytes = self.bytes_list_to_bytes(replacement_list)
+                replacement_hex_str = replacement_hex
+            else:
+                raise TypeError(f"不支持的替换参数类型: {type(replacement_hex)}，"
+                               f"请使用十六进制字符串、bytes或bytearray")
             
             self.logger.info(f"\n{'='*60}")
             self.logger.info(f"替换地址: 0x{address:X}")
-            self.logger.info(f"替换字节: {replacement_hex}")
+            self.logger.info(f"替换字节: {replacement_hex_str}")
             self.logger.info(f"字节长度: {len(replacement_list)}")
+            self.logger.info(f"参数类型: {type(replacement_hex).__name__}")
             self.logger.info(f"{'='*60}")
             
             try:
@@ -476,30 +486,40 @@ class MemoryEditor:
             self.logger.error(f"✗ 替换异常: {e}")
             return {'address': address, 'original': '', 'new': ''}
 
-    def search_and_replace(self, pattern_hex, replacement_hex, replace_all=False, 
-                           user_only=True, base_only=False):
+    def search_and_replace(self, pattern_hex, replacement_hex, replace_all=False, user_only=True, base_only=False):
         """搜索特征码并替换"""
         pattern_list = self.pattern_to_bytes(pattern_hex)
-        replacement_list = self.pattern_to_bytes(replacement_hex)
+        
+        if isinstance(replacement_hex, bytearray):
+            replacement_bytes = bytes(replacement_hex)
+            replacement_list = list(replacement_hex)
+            replacement_hex_display = ' '.join(f'{b:02X}' for b in replacement_hex)
+        elif isinstance(replacement_hex, bytes):
+            replacement_bytes = replacement_hex
+            replacement_list = list(replacement_hex)
+            replacement_hex_display = ' '.join(f'{b:02X}' for b in replacement_hex)
+        else:
+            replacement_list = self.pattern_to_bytes(replacement_hex)
+            replacement_bytes = self.bytes_list_to_bytes(replacement_list)
+            replacement_hex_display = replacement_hex
         
         if len(replacement_list) != len(pattern_list):
-            self.logger.error(f"错误: 特征码长度({len(pattern_list)})与替换码长度({len(replacement_list)})不匹配")
-            return {"success_count": 0, "data": [], "errors": ["长度不匹配"]}
-        
-        replacement_bytes = self.bytes_list_to_bytes(replacement_list)
+            self.logger.warning(f"注意: 特征码长度({len(pattern_list)})与替换码长度({len(replacement_list)})不同")
+            self.logger.warning(f"将以替换码长度({len(replacement_list)})为准进行替换")
         
         self.logger.info(f"\n{'='*60}")
         self.logger.info(f"搜索特征码: {pattern_hex}")
-        self.logger.info(f"替换为:     {replacement_hex}")
-        self.logger.info(f"模式长度:   {len(pattern_list)} 字节")
+        self.logger.info(f"替换为: {replacement_hex_display}")
+        self.logger.info(f"特征码长度: {len(pattern_list)} 字节")
+        self.logger.info(f"替换码长度: {len(replacement_list)} 字节")
         
         if base_only:
             if self.base_module_info:
-                self.logger.info(f"扫描范围:   基础模块 ({self.process_name}, 0x{self.base_module_info['base']:X})")
+                self.logger.info(f"扫描范围: 基础模块 ({self.process_name}, 0x{self.base_module_info['base']:X})")
             else:
-                self.logger.info(f"扫描范围:   基础模块 (未找到模块信息)")
+                self.logger.info(f"扫描范围: 基础模块 (未找到模块信息)")
         else:
-            self.logger.info(f"扫描范围:   {'仅用户模块' if user_only else '所有模块'}")
+            self.logger.info(f"扫描范围: {'仅用户模块' if user_only else '所有模块'}")
         self.logger.info(f"{'='*60}")
         
         results = self._pattern_scan_core(
@@ -551,7 +571,9 @@ class MemoryEditor:
                         'module_base': mod_base,
                         'offset': offset,
                         'original': original_hex,
-                        'new': replace_result['new']
+                        'new': replace_result['new'],
+                        'pattern_length': len(pattern_list),
+                        'replacement_length': len(replacement_list)
                     })
                 else:
                     error_msg = f"验证失败: 地址 0x{addr:X}"
@@ -720,9 +742,7 @@ class MemoryEditor:
             return None
 
     def lock_value(self, address, value, data_type='int', interval=0.05, lock_id=None):
-        """
-        锁定内存值
-        """
+        """锁定内存值"""
         if not self.pm:
             self.logger.error("未连接到进程")
             return None
@@ -837,32 +857,25 @@ class MemoryEditor:
                 user32.GetWindowThreadProcessId(hwnd, ctypes.byref(window_pid))
                 
                 if window_pid.value == target_pid:
-                    # 获取窗口标题
                     length = user32.GetWindowTextLengthW(hwnd) + 1
                     title_buffer = ctypes.create_unicode_buffer(length)
                     user32.GetWindowTextW(hwnd, title_buffer, length)
                     window_title = title_buffer.value
                     
-                    # 获取窗口类名
                     class_buffer = ctypes.create_unicode_buffer(256)
                     user32.GetClassNameW(hwnd, class_buffer, 256)
                     window_class = class_buffer.value
                     
-                    # 获取窗口位置和大小
                     rect = wintypes.RECT()
                     user32.GetWindowRect(hwnd, ctypes.byref(rect))
                     
-                    # 检查窗口是否最小化/最大化
                     is_iconic = user32.IsIconic(hwnd)
                     is_zoomed = user32.IsZoomed(hwnd)
                     
-                    # 检查窗口是否可用
                     is_enabled = user32.IsWindowEnabled(hwnd)
                     
-                    # 获取父窗口
                     parent_hwnd = user32.GetParent(hwnd)
                     
-                    # 创建窗口信息字典
                     window_info = {
                         'hwnd': hwnd,
                         'pid': window_pid.value,
@@ -914,3 +927,42 @@ class MemoryEditor:
         except Exception as e:
             print(f"错误: 获取 {dll_name}.{func_name} 地址失败: {str(e)}")
             return None
+
+    def alloc_near(self, target_addr, size):
+        """在目标地址附近分配内存"""
+        print(f"目标地址: {target_addr:016X}")
+        
+        search_start = max(0x10000, target_addr - 0x7FFF0000)
+        search_end = target_addr + 0x7FFF0000
+        
+        search_addr = search_start
+        attempts = 0
+        
+        while search_addr < search_end:
+            attempts += 1
+            
+            addr = kernel32.VirtualAllocEx(
+                self.pm.process_handle,
+                ctypes.c_uint64(search_addr),
+                size,
+                0x3000,
+                0x40
+            )
+            
+            if addr and addr != 0:
+                rel32 = addr - (target_addr + 5)
+                print(f"尝试 #{attempts}: 分配在 {addr:016X}, rel32 = {rel32}")
+                
+                if -0x80000000 <= rel32 <= 0x7FFFFFFF:
+                    print(f"✓ 成功！")
+                    return addr
+                else:
+                    print(f"✗ 太远，释放")
+                    kernel32.VirtualFreeEx(self.pm.process_handle, ctypes.c_uint64(addr), 0, 0x8000)
+            
+            search_addr += 0x10000
+            
+            if attempts % 100 == 0:
+                print(f"已尝试 {attempts} 次, 当前地址: {search_addr:016X}")
+        
+        raise Exception(f"找不到合适的地址！共尝试 {attempts} 次")
