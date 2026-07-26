@@ -11,38 +11,14 @@ from datetime import datetime
 from memoryeditor import MemoryEditor
 from minesweeperoverlay import MinesweeperOverlay
 import struct
-import os
-import ctypes
-from ctypes import wintypes
 
 
-# WNDPROC_CLICK_HOOK_BEGIN
 CLICK_HOOK_MESSAGE_NAME = "Win7MinesweeperHack.InternalClick.v2"
 CLICK_HOOK_READY_PROPERTY = "Win7MinesweeperHack.WndProcHookReady.v2"
 CLICK_HOOK_LAST_SEQUENCE_PROPERTY = "Win7MinesweeperHack.LastSequence.v2"
 CLICK_HOOK_LAST_RESULT_PROPERTY = "Win7MinesweeperHack.LastResult.v2"
 
 CLICK_HOOK_RESULT_SUCCESS = 1
-
-user32.RegisterWindowMessageW.argtypes = [wintypes.LPCWSTR]
-user32.RegisterWindowMessageW.restype = wintypes.UINT
-
-user32.PostMessageW.argtypes = [
-    wintypes.HWND,
-    wintypes.UINT,
-    ctypes.c_size_t,
-    ctypes.c_ssize_t
-]
-user32.PostMessageW.restype = wintypes.BOOL
-
-user32.GetPropW.argtypes = [
-    wintypes.HWND,
-    wintypes.LPCWSTR
-]
-user32.GetPropW.restype = wintypes.HANDLE
-# WNDPROC_CLICK_HOOK_END
-
-
 
 class MinesweeperHack:
     def __init__(self, root, queue):
@@ -543,7 +519,6 @@ class MinesweeperHack:
         )
         sequence = self._next_click_hook_sequence()
 
-        ctypes.set_last_error(0)
         result = user32.PostMessageW(
             self.main_hwnd,
             self._click_hook_message,
@@ -552,10 +527,6 @@ class MinesweeperHack:
         )
 
         if not result:
-            error_code = ctypes.get_last_error()
-            self.editor.logger.error(
-                f"PostMessageW失败，错误码: {error_code}"
-            )
             return False
 
         engine_state_address = (
