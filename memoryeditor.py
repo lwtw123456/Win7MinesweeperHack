@@ -1,10 +1,12 @@
 import threading
 import pymem.exception
+import pymem.process
 from win_api import *
 import logging
 import time
 import pymem
 import sys
+import os
 
 
 class MemoryEditor:
@@ -42,6 +44,46 @@ class MemoryEditor:
             self.logger.error(f"错误: 未找到基地址")
         return self.pm
     
+
+    def inject_dll(self, dll_path):
+        """注入DLL"""
+        if not self.pm:
+            self.logger.error("未连接到进程")
+            return False
+
+        current_dir = os.path.dirname(
+            os.path.abspath(__file__)
+        )
+
+        if not os.path.isabs(dll_path):
+            dll_path = os.path.join(
+                current_dir,
+                dll_path
+            )
+
+        dll_path = os.path.abspath(dll_path)
+
+        if not os.path.exists(dll_path):
+            self.logger.error(
+                f"DLL文件不存在: {dll_path}"
+            )
+            return False
+
+        try:
+            pymem.process.inject_dll_from_path(
+                self.pm.process_handle,
+                dll_path
+            )
+            self.logger.info(
+                f"注入DLL成功: {dll_path}"
+            )
+            return True
+        except Exception as e:
+            self.logger.error(
+                f"注入DLL失败: {e}"
+            )
+            return False
+
     def disconnect(self):
         """断开连接"""
         self.unlock_all()
