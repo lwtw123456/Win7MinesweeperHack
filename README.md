@@ -69,7 +69,9 @@ pip install pymem pillow
 1. 编译dll
 
 ```bash
+cd native
 build_x64.bat
+cd ..
 ```
 
 2. 运行扫雷
