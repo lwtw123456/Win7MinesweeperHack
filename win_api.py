@@ -82,6 +82,25 @@ EnumWindowsProc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPAR
 user32.EnumWindows.argtypes = [EnumWindowsProc, wintypes.LPARAM]
 user32.EnumWindows.restype = wintypes.BOOL
 
+# 窗口消息
+user32.RegisterWindowMessageW.argtypes = [wintypes.LPCWSTR]
+user32.RegisterWindowMessageW.restype = wintypes.UINT
+
+user32.PostMessageW.argtypes = [
+    wintypes.HWND,
+    wintypes.UINT,
+    ctypes.c_size_t,
+    ctypes.c_ssize_t
+]
+user32.PostMessageW.restype = wintypes.BOOL
+
+user32.GetPropW.argtypes = [
+    wintypes.HWND,
+    wintypes.LPCWSTR
+]
+user32.GetPropW.restype = wintypes.HANDLE
+
+
 # ========== Kernel32 DLL 函数定义 ==========
 # 进程操作
 kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
