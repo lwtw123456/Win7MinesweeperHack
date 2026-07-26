@@ -138,7 +138,6 @@ ClickResult ExecuteClick(void* cell_pointer) noexcept {
             return ClickResult::GameNotRunning;
         }
 
-        // 保留仓库原 CALL shellcode 在调用前执行的状态准备。
         *reinterpret_cast<std::uint8_t*>(
             game_root + 0x29
         ) = 0;
@@ -326,8 +325,6 @@ DWORD WINAPI HookMonitorThread(LPVOID) {
         return GetLastError();
     }
 
-    // 持续发现同进程中新建的顶层窗口。这样窗口重建后，
-    // 不需要再次执行 Python 远程 CALL。
     while (true) {
         EnumWindows(
             EnumWindowsCallback,
