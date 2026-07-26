@@ -11,6 +11,37 @@ from datetime import datetime
 from memoryeditor import MemoryEditor
 from minesweeperoverlay import MinesweeperOverlay
 import struct
+import os
+import ctypes
+from ctypes import wintypes
+
+
+# WNDPROC_CLICK_HOOK_BEGIN
+CLICK_HOOK_MESSAGE_NAME = "Win7MinesweeperHack.InternalClick.v2"
+CLICK_HOOK_READY_PROPERTY = "Win7MinesweeperHack.WndProcHookReady.v2"
+CLICK_HOOK_LAST_SEQUENCE_PROPERTY = "Win7MinesweeperHack.LastSequence.v2"
+CLICK_HOOK_LAST_RESULT_PROPERTY = "Win7MinesweeperHack.LastResult.v2"
+
+CLICK_HOOK_RESULT_SUCCESS = 1
+
+user32.RegisterWindowMessageW.argtypes = [wintypes.LPCWSTR]
+user32.RegisterWindowMessageW.restype = wintypes.UINT
+
+user32.PostMessageW.argtypes = [
+    wintypes.HWND,
+    wintypes.UINT,
+    ctypes.c_size_t,
+    ctypes.c_ssize_t
+]
+user32.PostMessageW.restype = wintypes.BOOL
+
+user32.GetPropW.argtypes = [
+    wintypes.HWND,
+    wintypes.LPCWSTR
+]
+user32.GetPropW.restype = wintypes.HANDLE
+# WNDPROC_CLICK_HOOK_END
+
 
 
 class MinesweeperHack:
@@ -61,6 +92,15 @@ class MinesweeperHack:
         self.editor = MemoryEditor("Minesweeper.exe")
         self.editor.connect()
         self._initialize_overlay(root)
+
+        # WNDPROC_CLICK_HOOK_STATE_BEGIN
+        self._click_hook_dll = "MinesweeperWndProcHook.dll"
+        self._click_hook_message = user32.RegisterWindowMessageW(
+            CLICK_HOOK_MESSAGE_NAME
+        )
+        self._click_hook_sequence = 0
+        self._click_hook_ready = False
+        # WNDPROC_CLICK_HOOK_STATE_END
 
     def _initialize_overlay(self, root):
         try:
@@ -428,307 +468,265 @@ class MinesweeperHack:
             self.editor.inject_shellcode(shellcode)
             return True
             
-    def auto_click_quick(self):
-        final_address = self.editor.calculate_pointer_chain(*self.paths["engine_state"])
-        if self.editor.read_value(final_address, "int") != 1:
-            return
-        self._get_all_grid_data()
-        rcx_value_addr = self.editor.calculate_pointer_chain(*self.paths["click_rcx"])
-        target_function_addr = self.editor.calculate_pointer_chain(*self.paths["click_func"])
-        shellcode = None
-        while True:
-            mines_grid_centers = self._get_mines_grid_centers()
-            if not mines_grid_centers and not shellcode:
-                first_click_rdx = self.editor.calculate_pointer_chain(*self.paths["first_click_rdx"])
-                shellcode = bytearray([0x48, 0x83, 0xEC, 0x28])
-                shellcode.extend([
-                    0x48, 0xB9,                                # mov rcx, imm64
-                ])
-                shellcode += struct.pack('<Q', rcx_value_addr)
-                shellcode.extend([
-                    0x49, 0x89, 0xCC,                          # mov r12, rcx
-                    0x4D, 0x89, 0xE7,                          # mov r15, r12
-                    0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
-                    0x49, 0x83, 0xC7, 0x29,                    # add r15, 0x29
-                    0x41, 0xC6, 0x07, 0x00,                    # mov byte ptr [r15], 0x00
-                    0x48, 0xBA,                                # mov rdx, imm64
-                ])
-                shellcode += struct.pack('<Q', first_click_rdx)
-                shellcode.extend([
-                    0x48, 0x83, 0xEC, 0x20,                    # sub rsp, 0x20
-                    0x48, 0xB8,                                # mov rax, imm64
-                ])
-                shellcode += struct.pack('<Q', target_function_addr)
 
-                shellcode.extend([
-                    0xFF, 0xD0,                                # call rax
-                    0x48, 0x83, 0xC4, 0x20,                    # add rsp, 0x20
-                    0x48, 0x83, 0xC4, 0x28,                    # add rsp, 0x28
-                    0xC3,                                      # ret
-                ])
-                self.editor.inject_shellcode(shellcode)
-            else:
-                break
+    def _ensure_click_hook(self):
+        if not self._click_hook_message:
+            self.editor.logger.error("注册自动点击消息失败")
+            return False
+
+        if user32.GetPropW(
+                self.main_hwnd,
+                CLICK_HOOK_READY_PROPERTY):
+            self._click_hook_ready = True
+            return True
+
+        self._click_hook_ready = False
+
+        if not self.editor.inject_dll(self._click_hook_dll):
+            return False
+
+        deadline = time.time() + 5.0
+        while time.time() < deadline:
+            if user32.GetPropW(
+                    self.main_hwnd,
+                    CLICK_HOOK_READY_PROPERTY):
+                self._click_hook_ready = True
+                return True
             time.sleep(0.02)
-            
-        mines_set = set(mines_grid_centers)
-        need_set = set(self.all_grid_centers) - mines_set
-        safe_first_rc = self._get_safe_cells_rc(need_set, mines_set)
-        safe_first_rc.discard((0, 0))
-        
-        coord_count = len(safe_first_rc)
-        buffer_size = 4 + (coord_count * 8)
-        
-        coords_address = self.editor.pm.allocate(buffer_size)
-        buffer = struct.pack('<I', coord_count)
-        
-        for x, y in safe_first_rc:
-            buffer += struct.pack('<ii', x, y)
-        
-        self.editor.write_value(coords_address, buffer, "bytes")
-        
-        rdx_value_addr = self.editor.calculate_pointer_chain(*self.paths["click_rdx"])
-        sleep_addr = self.editor.get_winapi_func_addr("kernel32", "Sleep")
 
-        shellcode = bytearray([0x48, 0x83, 0xEC, 0x28])
+        self.editor.logger.error(
+            "DLL已注入，但WndProc Hook未在5秒内就绪"
+        )
+        return False
 
-        shellcode.extend([
-            0x48, 0xB9,                                # mov rcx, imm64
-        ])
-        shellcode += struct.pack('<Q', rcx_value_addr)
+    def _next_click_hook_sequence(self):
+        self._click_hook_sequence = (
+            self._click_hook_sequence + 1
+        ) & 0x7FFFFFFF
 
-        shellcode.extend([
-            0x49, 0x89, 0xCC,                          # mov r12, rcx
-            0x48, 0xB9,                                # mov rcx, imm64
-        ])
-        shellcode += struct.pack('<Q', coords_address)
-        shellcode.extend([
-            0x48, 0x89, 0xCE,                          # mov rsi, rcx 
-            0x8B, 0x1E,                                # mov ebx, [rsi]
-            0x48, 0x83, 0xC6, 0x04,                    # add rsi, 4
-            0x85, 0xDB,                                # test ebx, ebx
-        ])
+        if self._click_hook_sequence == 0:
+            self._click_hook_sequence = 1
 
-        jz_early_exit_pos = len(shellcode)
-        shellcode.extend([
-            0x0F, 0x84, 0x00, 0x00, 0x00, 0x00,        # jz done
-            0x4D, 0x89, 0xE7,                          # mov r15, r12
-            0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
-            0x49, 0x83, 0xC7, 0x29,                    # add r15, 0x29
-            0x41, 0xC6, 0x07, 0x00,                    # mov byte ptr [r15], 0x00
-            0x31, 0xFF,                                # xor edi, edi
-        ])
+        return self._click_hook_sequence
 
-        loop_start = len(shellcode)
-        shellcode.extend([
-            0x39, 0xDF,                                # cmp edi, ebx
-        ])
+    def _get_click_cell_address(self, row, col):
+        base_offset, offsets = self.paths["first_click_rdx"]
+        offsets = list(offsets)
+        offsets[2] = col * 8
+        offsets[4] = row * 8
 
-        jge_pos = len(shellcode)
-        shellcode.extend([
-            0x0F, 0x8D, 0x00, 0x00, 0x00, 0x00,        # jge done
-        ])
+        return self.editor.calculate_pointer_chain(
+            base_offset,
+            offsets
+        )
 
-        shellcode.extend([
-            0x48, 0xC1, 0xE7, 0x03,                    # shl rdi, 3
-            0x8B, 0x4C, 0x3E, 0x04,                    # mov ecx, [rsi+rdi+4]
-            0x8B, 0x14, 0x3E,                          # mov edx, [rsi+rdi]
-            0x48, 0xC1, 0xEF, 0x03,                    # shr rdi, 3
-            0x4D, 0x89, 0xE7,                          # mov r15, r12
-            0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
-            0x49, 0x83, 0xC7, 0x18,                    # add r15, 0x18
-            0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
-            0x49, 0x83, 0xC7, 0x50,                    # add r15, 0x50
-            0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
-            0x49, 0x83, 0xC7, 0x10,                    # add r15, 0x10
-            0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
-            0x4D, 0x8D, 0x3C, 0xCF,                    # lea r15, [r15+rcx*8]
-            0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
-            0x49, 0x83, 0xC7, 0x10,                    # add r15, 0x10
-            0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
-            0x4D, 0x8D, 0x3C, 0x97,                    # lea r15, [r15+rdx*4]
-            0x41, 0x80, 0x3F, 0x09                     # cmp byte ptr [r15], 9
-        ])
+    def _click_cell_with_hook(
+            self,
+            row,
+            col,
+            status_base_offset,
+            status_offsets,
+            timeout=1.5):
+        current_status = self._read_status(
+            row,
+            col,
+            status_base_offset,
+            status_offsets
+        )
 
-        jne_skip_pos = len(shellcode)
-        shellcode.extend([
-            0x0F, 0x85, 0x00, 0x00, 0x00, 0x00,        # jne loop_continue
-            0x4D, 0x89, 0xE7,                          # mov r15, r12
-            0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
-            0x49, 0x83, 0xC7, 0x10,                    # add r15, 0x10
-            0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
-            0x49, 0x83, 0xC7, 0x18,                    # add r15, 0x18
-            0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
-            0x4D, 0x8D, 0x3C, 0xCF,                    # lea r15, [r15+rcx*8]
-            0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
-            0x49, 0x83, 0xC7, 0x10,                    # add r15, 0x10
-            0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
-            0x4D, 0x8D, 0x3C, 0xD7,                    # lea r15, [r15+rdx*8]
-            0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
-            0x49, 0xBB,                                # mov r11, imm64
-        ])
+        if current_status != 9:
+            return True
 
-        shellcode += struct.pack('<Q', rdx_value_addr)
+        cell_address = self._get_click_cell_address(
+            row,
+            col
+        )
+        sequence = self._next_click_hook_sequence()
 
-        shellcode.extend([
-            0x4D, 0x89, 0x3B,                          # mov [r11], r15
-            0x49, 0x8B, 0x13,                          # mov rdx, [r11]
-            0x4C, 0x89, 0xE1,                          # mov rcx, r12
-            0x48, 0x83, 0xEC, 0x40,                    # sub rsp, 0x40
-            0x48, 0xB8,                                # mov rax, imm64
-        ])
-        shellcode += struct.pack('<Q', target_function_addr)
+        ctypes.set_last_error(0)
+        result = user32.PostMessageW(
+            self.main_hwnd,
+            self._click_hook_message,
+            sequence,
+            cell_address
+        )
 
-        shellcode.extend([
-            0xFF, 0xD0,                                # call rax
-            0x48, 0x83, 0xC4, 0x40,                    # add rsp, 0x40
-            0x48, 0x83, 0xEC, 0x20,                    # sub rsp, 0x20
-            0x48, 0xC7, 0xC1, 0x64, 0x00, 0x00, 0x00,  # mov rcx, 100
-            0x48, 0xB8,                                # mov rax, sleep
-        ])
-        shellcode += struct.pack('<Q', sleep_addr)
-        shellcode.extend([
-            0xFF, 0xD0,                                # call rax
-            0x48, 0x83, 0xC4, 0x20,                    # add rsp, 0x20
-        ])
+        if not result:
+            error_code = ctypes.get_last_error()
+            self.editor.logger.error(
+                f"PostMessageW失败，错误码: {error_code}"
+            )
+            return False
 
-        loop_continue_pos = len(shellcode)
+        engine_state_address = (
+            self.editor.calculate_pointer_chain(
+                *self.paths["engine_state"]
+            )
+        )
 
-        shellcode.extend([
-            0xFF, 0xC7,                                # inc edi
-        ])
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            current_status = self._read_status(
+                row,
+                col,
+                status_base_offset,
+                status_offsets
+            )
 
-        jmp_back_offset = loop_start - (len(shellcode) + 5)
-        shellcode.extend([0xE9])
-        shellcode += struct.pack('<i', jmp_back_offset)
+            if current_status != 9:
+                return True
 
-        done_pos = len(shellcode)
+            if self.editor.read_value(
+                    engine_state_address,
+                    "int") != 1:
+                return True
 
-        jz_offset = done_pos - (jz_early_exit_pos + 6)
-        shellcode[jz_early_exit_pos + 2:jz_early_exit_pos + 6] = struct.pack('<i', jz_offset)
+            handled_sequence = int(
+                user32.GetPropW(
+                    self.main_hwnd,
+                    CLICK_HOOK_LAST_SEQUENCE_PROPERTY
+                ) or 0
+            )
 
-        jge_offset = done_pos - (jge_pos + 6)
-        shellcode[jge_pos + 2:jge_pos + 6] = struct.pack('<i', jge_offset)
+            if handled_sequence == sequence:
+                hook_result = int(
+                    user32.GetPropW(
+                        self.main_hwnd,
+                        CLICK_HOOK_LAST_RESULT_PROPERTY
+                    ) or 0
+                )
 
-        jne_offset = loop_continue_pos - (jne_skip_pos + 6)
-        shellcode[jne_skip_pos + 2:jne_skip_pos + 6] = struct.pack('<i', jne_offset)
+                if hook_result != CLICK_HOOK_RESULT_SUCCESS:
+                    self.editor.logger.error(
+                        "WndProc内部点击失败，"
+                        f"结果码: {hook_result}"
+                    )
+                    return False
 
-        shellcode.extend([
-            0x4D, 0x89, 0xE7,                          # mov r15, r12
-            0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
-            0x49, 0x83, 0xC7, 0x29,                    # add r15, 0x29
-            0x41, 0xC6, 0x07, 0x01,                    # mov byte ptr [r15], 0x01
-            0x4D, 0x31, 0xED,                          # xor r13, r13
-        ])
-        outer_loop_offset = len(shellcode)
+            time.sleep(0.001)
 
-        shellcode.extend([
-            0x4D, 0x31, 0xF6,                          # xor r14, r14
-        ])
-        inner_loop_offset = len(shellcode)
+        self.editor.logger.error(
+            f"等待格子打开超时: row={row}, col={col}"
+        )
+        return False
 
-        shellcode.extend([
-            0x4D, 0x89, 0xE7,                          # mov r15, r12
-            0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
-            0x49, 0x83, 0xC7, 0x18,                    # add r15, 0x18
-            0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
-            0x49, 0x83, 0xC7, 0x50,                    # add r15, 0x50
-            0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
-            0x49, 0x83, 0xC7, 0x10,                    # add r15, 0x10
-            0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
-            0x4F, 0x8D, 0x3C, 0xF7,                    # lea r15, [r15+r14*8]
-            0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
-            0x49, 0x83, 0xC7, 0x10,                    # add r15, 0x10
-            0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
-            0x4F, 0x8D, 0x3C, 0xAF,                    # lea r15, [r15+r13*4]
-            0x41, 0x80, 0x3F,0x09                      # cmp byte ptr [r15], 9
-        ])
-        jne_to_continue_pos = len(shellcode)
-        shellcode.extend([
-            0x0F, 0x85,                                # jne rel32
-            0x00, 0x00, 0x00, 0x00,                    # placeholder
-            0x4D, 0x8B, 0x3C, 0x24,                    # mov r15, [r12]
-            0x49, 0x83, 0xC7, 0x18,                    # add r15, 0x18
-            0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
-            0x49, 0x83, 0xC7, 0x58,                    # add r15, 0x58
-            0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
-            0x49, 0x83, 0xC7, 0x10,                    # add r15, 0x10
-            0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
-            0x4F, 0x8D, 0x3C, 0xF7,                    # lea r15, [r15 + r14 * 8]
-            0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
-            0x49, 0x83, 0xC7, 0x10,                    # add r15, 0x10
-            0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
-            0x4D, 0x01, 0xEF,                          # add r15, r13
-            0x41, 0x80, 0x3F, 0x00                     # cmp byte ptr [r15], 0
-        ])
-        je_offset_pos = len(shellcode)
-        shellcode.extend([
-            0x0F, 0x85,                                # jne rel32
-            0x00, 0x00, 0x00, 0x00,                    # placeholder
-            0x4D, 0x89, 0xE7,                          # mov r15, r12
-            0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
-            0x49, 0x83, 0xC7, 0x10,                    # add r15, 0x10
-            0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
-            0x49, 0x83, 0xC7, 0x18,                    # add r15, 0x18
-            0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
-            0x4F, 0x8D, 0x3C, 0xF7,                    # lea r15, [r15 + r14*8]
-            0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
-            0x49, 0x83, 0xC7, 0x10,                    # add r15, 0x10
-            0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
-            0x4F, 0x8D, 0x3C, 0xEF,                    # lea r15, [r15 + r13*8]
-            0x4D, 0x8B, 0x3F,                          # mov r15, [r15]
-            0x49, 0xBB,                                # mov r11, imm64
-        ])
-        
-        shellcode += struct.pack('<Q', rdx_value_addr)
+    @staticmethod
+    def _has_neighbor_mine(
+            row,
+            col,
+            height,
+            width,
+            mines_set):
+        for row_offset in (-1, 0, 1):
+            for col_offset in (-1, 0, 1):
+                if row_offset == 0 and col_offset == 0:
+                    continue
 
-        shellcode.extend([
-            0x4D, 0x89, 0x3B,                          # mov [r11], r15
-            0x49, 0x8B, 0x13,                          # mov rdx, [r11]
-            0x4C, 0x89, 0xE1,                          # mov rcx, r12
-            0x48, 0x83, 0xEC, 0x20,                    # sub rsp, 0x20
-            0x48, 0xB8,                                # mov rax, imm64
-        ])
-        shellcode += struct.pack('<Q', target_function_addr)
-        shellcode.extend([
-            0xFF, 0xD0,                                # call rax
-            0x48, 0x83, 0xC4, 0x20,                    # add rsp, 0x20
-            0x48, 0x83, 0xEC, 0x20,                    # sub rsp, 0x20
-            0x48, 0xC7, 0xC1, 0x14, 0x00, 0x00, 0x00,  # mov rcx, 20
-            0x48, 0xB8,                                # mov rax, sleep
-        ])
-        shellcode += struct.pack('<Q', sleep_addr)
-        shellcode.extend([
-            0xFF, 0xD0,                                # call rax
-            0x48, 0x83, 0xC4, 0x20,                    # add rsp, 0x20
-        ])
+                neighbor_row = row + row_offset
+                neighbor_col = col + col_offset
 
-        inner_continue_target = len(shellcode)
+                if (
+                    0 <= neighbor_row < height
+                    and 0 <= neighbor_col < width
+                    and (
+                        neighbor_row,
+                        neighbor_col
+                    ) in mines_set
+                ):
+                    return True
 
-        jne_rel = inner_continue_target - (jne_to_continue_pos + 6)
-        struct.pack_into('<i', shellcode, jne_to_continue_pos + 2, jne_rel)
-        shellcode.extend([
-            0x49, 0xFF, 0xC6,                          # inc r14
-            0x49, 0x83, 0xFE, self.width & 0xFF
-        ])
-        inner_jump_offset = inner_loop_offset - (len(shellcode) + 6)
-        shellcode.extend([0x0F, 0x82])
-        shellcode += struct.pack('<i', inner_jump_offset)
-        shellcode.extend([
-            0x49, 0xFF, 0xC5,                          # inc r13
-            0x49, 0x83, 0xFD, self.height & 0xFF
-        ])
-        outer_jump_offset = outer_loop_offset - (len(shellcode) + 6)
-        shellcode.extend([0x0F, 0x82])
-        shellcode += struct.pack('<i', outer_jump_offset)
-        shellcode.extend([
-            0x48, 0x83, 0xC4, 0x28,                    # add rsp, 0x28
-            0xC3,                                      # ret
-        ])
+        return False
 
-        rel = inner_continue_target - (je_offset_pos + 6)
-        struct.pack_into('<i', shellcode, je_offset_pos + 2, rel)
-        self.editor.inject_shellcode(shellcode)
+    def auto_click_quick(self):
+        final_address = self.editor.calculate_pointer_chain(
+            *self.paths["engine_state"]
+        )
+
+        if self.editor.read_value(
+                final_address,
+                "int") != 1:
+            return
+
+        self._get_all_grid_data()
+
+        if not self._ensure_click_hook():
+            return
+
+        status_base_offset, status_offsets = (
+            self.paths["status"]
+        )
+        status_offsets = list(status_offsets)
+
+        if not self._is_game_started():
+            if not self._click_cell_with_hook(
+                    0,
+                    0,
+                    status_base_offset,
+                    status_offsets):
+                return
+
+            deadline = time.time() + 2.0
+            while time.time() < deadline:
+                if self._is_game_started():
+                    break
+
+                if self.editor.read_value(
+                        final_address,
+                        "int") != 1:
+                    return
+
+                time.sleep(0.01)
+            else:
+                self.editor.logger.error(
+                    "第一次点击后雷区未生成"
+                )
+                return
+
+        mines_set = set(
+            self._get_mines_position()
+        )
+
+        safe_cells = [
+            (row, col)
+            for row in range(self.height)
+            for col in range(self.width)
+            if (row, col) not in mines_set
+        ]
+
+        safe_cells.sort(
+            key=lambda cell: (
+                self._has_neighbor_mine(
+                    cell[0],
+                    cell[1],
+                    self.height,
+                    self.width,
+                    mines_set
+                ),
+                cell[0],
+                cell[1]
+            )
+        )
+
+        for row, col in safe_cells:
+            if self.editor.read_value(
+                    final_address,
+                    "int") != 1:
+                break
+
+            if self._read_status(
+                    row,
+                    col,
+                    status_base_offset,
+                    status_offsets) != 9:
+                continue
+
+            if not self._click_cell_with_hook(
+                    row,
+                    col,
+                    status_base_offset,
+                    status_offsets):
+                return
+
         return True
 
     def win_now(self):
@@ -842,4 +840,3 @@ class MinesweeperHack:
         for i in click_perfect_patch_backend['data']:
             self.editor.search_and_replace(i['new'], i['original'], replace_all=False, base_only=True)
         return True
-
