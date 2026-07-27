@@ -49,7 +49,7 @@ GUI 使用 **Tkinter** 构建，操作直观。
 ├── utils.py                 # 图像识别 & 鼠标控制工具
 ├── win_api.py               # Windows API / ctypes 封装
 ├── native/                  # 自动扫雷（call） DLL
-├── native2/                 # 自定手牌 DLL
+├── native2/                 # 自定雷区 DLL
 └── README.md
 ```
 
