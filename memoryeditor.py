@@ -7,6 +7,7 @@ import time
 import pymem
 import sys
 import os
+import struct
 
 
 class MemoryEditor:
@@ -1008,3 +1009,115 @@ class MemoryEditor:
                 print(f"已尝试 {attempts} 次, 当前地址: {search_addr:016X}")
         
         raise Exception(f"找不到合适的地址！共尝试 {attempts} 次")
+
+    def get_function_address(self, dll_name, function_name):
+        """获取函数地址"""
+        if self.is_system_module(dll_name):
+            return self._get_system_api_address(dll_name, function_name)
+        else:
+            return self._get_private_dll_address(dll_name, function_name)
+    
+    def _get_system_api_address(self, dll_name, function_name):
+        """快速获取系统API地址"""
+        try:
+            dll_obj = ctypes.WinDLL(dll_name)
+            func_obj = getattr(dll_obj, function_name)
+            func_address = ctypes.cast(func_obj, ctypes.c_void_p).value
+            
+            self.logger.info(f"[+] 系统API: {dll_name}!{function_name}")
+            self.logger.info(f"    地址: 0x{func_address:X}")
+            
+            return func_address
+            
+        except AttributeError:
+            self.logger.info(f"[-] 函数不存在: {dll_name}!{function_name}")
+            return None
+        except OSError as e:
+            self.logger.info(f"[-] DLL加载失败: {dll_name}")
+            self.logger.info(f"    提示: 请确认DLL名称正确或改用 is_system_dll=False")
+            return None
+        except Exception as e:
+            self.logger.info(f"[-] 获取失败: {e}")
+            return None
+    
+    def _get_private_dll_address(self, dll_name, function_name):
+        """解析目标进程的私有DLL"""
+        try:
+            
+            dll_base = pymem.process.module_from_name(self.pm.process_handle, dll_name).lpBaseOfDll
+            self.logger.info(f"[+] 私有DLL: {dll_name}")
+            self.logger.info(f"    基址: 0x{dll_base:X}")
+            
+            # === 读取DOS头 ===
+            dos_header = self.pm.read_bytes(dll_base, 64)
+            e_magic = struct.unpack('<H', dos_header[0:2])[0]
+            
+            if e_magic != 0x5A4D:  # "MZ"
+                self.logger.info("[-] 无效的DOS签名")
+                return None
+            
+            e_lfanew = struct.unpack('<I', dos_header[60:64])[0]
+            
+            # === 读取PE头 ===
+            pe_header_addr = dll_base + e_lfanew
+            pe_header = self.pm.read_bytes(pe_header_addr, 264)
+            
+            pe_signature = struct.unpack('<I', pe_header[0:4])[0]
+            if pe_signature != 0x00004550:  # "PE\0\0"
+                self.logger.info("[-] 无效的PE签名")
+                return None
+            
+            # 判断架构
+            machine = struct.unpack('<H', pe_header[4:6])[0]
+            is_64bit = (machine == 0x8664)
+            arch = "x64" if is_64bit else "x86"
+            self.logger.info(f"    架构: {arch}")
+            
+            # === 获取导出表 ===
+            export_dir_rva_offset = 136 if is_64bit else 120
+            export_dir_rva = struct.unpack('<I', pe_header[export_dir_rva_offset:export_dir_rva_offset+4])[0]
+            
+            if export_dir_rva == 0:
+                self.logger.info("[-] 该DLL没有导出表")
+                return None
+            
+            # === 读取导出目录 ===
+            export_dir_addr = dll_base + export_dir_rva
+            export_dir = self.pm.read_bytes(export_dir_addr, 40)
+            
+            num_of_names = struct.unpack('<I', export_dir[24:28])[0]
+            addr_of_funcs_rva = struct.unpack('<I', export_dir[28:32])[0]
+            addr_of_names_rva = struct.unpack('<I', export_dir[32:36])[0]
+            addr_of_ords_rva = struct.unpack('<I', export_dir[36:40])[0]
+            
+            self.logger.info(f"    导出函数: {num_of_names} 个")
+            
+            # === 遍历导出名称表 ===
+            for i in range(num_of_names):
+                # 读取名称RVA
+                name_rva_addr = dll_base + addr_of_names_rva + (i * 4)
+                name_rva = struct.unpack('<I', self.pm.read_bytes(name_rva_addr, 4))[0]
+                
+                name_addr = dll_base + name_rva
+                current_name = self.pm.read_string(name_addr, 256)
+                
+                if current_name == function_name:
+                    ordinal_addr = dll_base + addr_of_ords_rva + (i * 2)
+                    ordinal = struct.unpack('<H', self.pm.read_bytes(ordinal_addr, 2))[0]
+                    
+                    func_addr_rva_addr = dll_base + addr_of_funcs_rva + (ordinal * 4)
+                    func_rva = struct.unpack('<I', self.pm.read_bytes(func_addr_rva_addr, 4))[0]
+                    func_addr = dll_base + func_rva
+                    
+                    self.logger.info(f"[+] 找到函数: {function_name}")
+                    self.logger.info(f"    RVA: 0x{func_rva:X}")
+                    self.logger.info(f"    绝对地址: 0x{func_addr:X}")
+                    
+                    return func_addr
+            
+            self.logger.info(f"[-] 函数未找到: {function_name}")
+            return None
+            
+        except Exception as e:
+            self.logger.info(f"[-] 解析私有DLL失败: {e}")
+            return None
