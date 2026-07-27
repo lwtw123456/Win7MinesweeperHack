@@ -80,7 +80,17 @@ class ControlWindow(ControlWindowUi):
             self.log_info(f"❌️ 请先开始游戏")
         else:
             self.log_info(f"🤖 自动游戏（SND）已完成")
-    
+
+    def self_define_mine(self):
+        is_on = self.switch_vars['自定雷区'].get()
+        if is_on:
+            self.hack.sd_mines()
+            self.log_info("🤪 自定雷区已启动")
+            self.log_info("开启新的一局，点击第一下，将跳出雷区选择界面")
+        else:
+            self.hack.cancel_sd_mines()
+            self.log_info("🤪 自定雷区已关闭")
+
     def lift_restrictions(self):
         is_on = self.switch_vars['允许0秒记录'].get()
         if is_on:
