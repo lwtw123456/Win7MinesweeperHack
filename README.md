@@ -15,6 +15,7 @@
 - ✏️ **手动修改时间**
 - 💣 **绘制雷区（Overlay 覆盖层显示）**
 - 💣 **原生方式显示雷区（call）**
+- 🤪 **自定雷区**
 - 🛡️ **无敌模式（踩雷不死）**
 - 🚫 **解除 0 秒通关限制**
 - 🎯 **点击即赢**
@@ -47,6 +48,8 @@ GUI 使用 **Tkinter** 构建，操作直观。
 ├── minesweeperoverlay.py    # Overlay 覆盖层
 ├── utils.py                 # 图像识别 & 鼠标控制工具
 ├── win_api.py               # Windows API / ctypes 封装
+├── native/                  # 自动扫雷（call） DLL
+├── native2/                 # 自定手牌 DLL
 └── README.md
 ```
 
@@ -70,6 +73,9 @@ pip install pymem pillow
 
 ```bash
 cd native
+build_x64.bat
+cd ..
+cd native2
 build_x64.bat
 cd ..
 ```
