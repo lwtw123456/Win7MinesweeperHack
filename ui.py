@@ -6,7 +6,7 @@ class ControlWindowUi(tk.Tk):
     """主界面"""
     def __init__(self):
         super().__init__()
-        self.title("Win7版64位《扫雷》十二项修改器")
+        self.title("Win7版64位《扫雷》十三项修改器")
         self.geometry("650x470")
         self.resizable(width=False, height=False)
         self._center_window()
@@ -56,13 +56,14 @@ class ControlWindowUi(tk.Tk):
             ("绘制雷区", self.show_mines),
             ("无敌模式", self.be_invincible),
             ("点击即赢", self.click_equal_win),
-            ("允许0秒记录", self.lift_restrictions),
+            ("自定雷区", self.self_define_mine),
+            ("零秒记录", self.lift_restrictions),
         ]
         
         for idx, (text, func) in enumerate(switch_config):
             var = tk.BooleanVar(value=False)
             self.switch_vars[text] = var
-            switch = ttk.Checkbutton(frame_switch, text=text, variable=var, width=12, command=func)
+            switch = ttk.Checkbutton(frame_switch, text=text, variable=var, width=9, command=func)
             switch.grid(row=0, column=idx, padx=8, pady=8)
 
         frame_button = ttk.LabelFrame(self, text="功能按钮区")
@@ -145,7 +146,10 @@ class ControlWindowUi(tk.Tk):
 
     def auto_win(self):
         pass
-    
+
+    def self_define_mine(self):
+        pass
+        
     def lift_restrictions(self):
         pass
     
