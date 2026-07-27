@@ -52,7 +52,8 @@ class MinesweeperHack:
             "click_perfect_2": ("83 FE 0C 0F 85 DF 01 00 00", "83 FE 0C 90 90 90 90 90 90"),
             "click_perfect_3": ("83 F8 0A 0F 84 AB 00 00 00 83 F8 0B", "83 F8 0A 0F 84 93 02 00 00 83 F8 0B"),
             "click_perfect_4": ("40 38 3C 0E 75 1E", "40 38 3C 0E 90 90"),
-            "click_perfect_patch":("48 8B 47 50 48 8B 48 10 4A 8B 04 E1", bytearray([0xE9]))
+            "click_perfect_patch":("48 8B 47 50 48 8B 48 10 4A 8B 04 E1", bytearray([0xE9])),
+            "mine_picker":("45 33 C9 44 39 0F", bytearray([0xE9])),
         }
         self._invincible_backend = None
         self._invincible_plus_backend = None
@@ -69,14 +70,13 @@ class MinesweeperHack:
         self.editor.connect()
         self._initialize_overlay(root)
 
-        # WNDPROC_CLICK_HOOK_STATE_BEGIN
         self._click_hook_dll = "MinesweeperWndProcHook.dll"
         self._click_hook_message = user32.RegisterWindowMessageW(
             CLICK_HOOK_MESSAGE_NAME
         )
         self._click_hook_sequence = 0
         self._click_hook_ready = False
-        # WNDPROC_CLICK_HOOK_STATE_END
+        self._pre_select_mine_positions()
 
     def _initialize_overlay(self, root):
         try:
@@ -86,6 +86,89 @@ class MinesweeperHack:
         except Exception as e:
             print(f"❌ 初始化 overlay 失败: {e}")
             self.overlay = None
+
+    def _pre_select_mine_positions(self):
+        self.editor.inject_dll('MinePicker.dll')
+        smp_func_addr = self.editor.get_function_address("MinePicker.dll", "SelectMinePositions")
+        self.smp_flag_addr = self.editor.pm.allocate(4)
+        self.editor.write_value(self.smp_flag_addr, 0)
+        patch_address = self.editor.search(self.patterns_replace['mine_picker'][0], False)[0]['address']
+        
+        shellcode = bytearray([
+            0x9C,                   # pushfq
+            0x50,                   # push rax
+            0x53,                   # push rbx
+            0x51,                   # push rcx
+            0x52,                   # push rdx
+            0x41, 0x50,             # push r8
+            0x41, 0x51,             # push r9
+            0x41, 0x52,             # push r10
+            0x41, 0x53,             # push r11
+            0x48, 0xBB
+        ])
+        shellcode += struct.pack("<Q", self.smp_flag_addr)
+
+        shellcode.extend([0x80, 0x3B, 0x01])  # cmp byte ptr [ebx], 1
+
+        jne_restore_pos = len(shellcode)
+
+        shellcode.extend([0x0F, 0x85, 0x00, 0x00, 0x00, 0x00])
+        
+        shellcode.extend([
+            0x48, 0x31, 0xC9,           # xor rcx, rcx
+            0x8A, 0x4E, 0x0C,           # mov cl,byte ptr ds:[rsi+C]
+            0x48, 0x8B, 0x56, 0x10,     # mov rdx, qword ptr [rsi+0x10]
+            0x49, 0x89, 0xC0,           # mov r8, rax
+            0x4C, 0x8B, 0x4F, 0x10,     # mov r9, qword ptr [rdi+0x10]
+            0x48, 0x83, 0xEC, 0x28,     # sub rsp, 0x28
+            0x48, 0xB8,
+        ])
+        
+        shellcode += struct.pack("<Q", smp_func_addr)
+
+        shellcode.extend([
+            0xFF, 0xD0,                  # call rax
+            0x48, 0x83, 0xC4, 0x28       # add rsp, 0x28
+        ])
+        
+        restore_context_pos = len(shellcode)
+
+        shellcode.extend([
+            0x41, 0x5B,             # pop r11
+            0x41, 0x5A,             # pop r10
+            0x41, 0x59,             # pop r9
+            0x41, 0x58,             # pop r8
+            0x5A,                   # pop rdx
+            0x59,                   # pop rcx
+            0x5B,                   # pop rbx
+            0x58,                   # pop rax
+            0x9D,                   # popfq
+            0x45, 0x33, 0xC9,       # xor r9d, r9d
+            0x44, 0x39, 0x0F,       # cmp dword ptr ds:[rdi], r9d
+        ])
+        
+        jmp_back_pos = len(shellcode)
+
+        shellcode.extend([
+            0xE9,
+            0x00, 0x00, 0x00, 0x00,
+        ])
+
+        offset = restore_context_pos - (jne_restore_pos + 6)
+        shellcode[jne_restore_pos + 2 : jne_restore_pos + 6] = struct.pack('<i', offset)
+
+        shellcode_addr = self.editor.alloc_near(patch_address, len(shellcode))
+
+        jmp_back_offset = (patch_address + 6) - (shellcode_addr + jmp_back_pos + 5)
+        shellcode[jmp_back_pos + 1 : jmp_back_pos + 5] = struct.pack('<i', jmp_back_offset)
+
+        rel32 = shellcode_addr - (patch_address + 5)
+        patch_bytes = bytearray([0xE9])
+        patch_bytes += struct.pack('<i', rel32)
+        patch_bytes.extend([0x90])
+
+        self.editor.replace(patch_address, patch_bytes)
+        self.editor.write_value(shellcode_addr, shellcode, "bytes")
 
     def _click_equal_win_keep(self):
         while not self._click_equal_win_thread_stop_event.is_set():
@@ -392,7 +475,21 @@ class MinesweeperHack:
                 self._monitor_thread = threading.Thread(target=self._monitor_state, daemon=True)
                 self._monitor_thread.start()
             return True
-    
+
+    def sd_mines(self):
+        try:
+            self.editor.write_value(self.smp_flag_addr, 1)
+            return True
+        except:
+            return False
+        
+    def cancel_sd_mines(self):
+        try:
+            self.editor.write_value(self.smp_flag_addr, 0)
+            return True
+        except:
+            return False
+
     def hide_mines(self):
         self.overlay.hide()
         self._monitor_thread_stop_event.set()
