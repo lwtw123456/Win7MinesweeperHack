@@ -805,6 +805,7 @@ class MinesweeperHack:
         return True
 
     def ultimate_click(self):
+        '''patch洪泛展开，理论上只点击一次'''
         final_address = self.editor.calculate_pointer_chain(*self.paths["engine_state"])
         if self.editor.read_value(final_address, "int") != 1:
             return
@@ -885,6 +886,7 @@ class MinesweeperHack:
         self._get_all_grid_data()
         status_base_offset, status_offsets = self.paths["status"]
         status_offsets = list(status_offsets)
+        # 兜底
         for coord in self.all_grid_centers:
             idx = self.coord2idx[coord]
             row, col = divmod(idx, self.width)
