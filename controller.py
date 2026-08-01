@@ -92,7 +92,7 @@ class ControlWindow(ControlWindowUi):
             self.log_info("🤪 自定雷区已关闭")
 
     def lift_restrictions(self):
-        is_on = self.switch_vars['允许0秒记录'].get()
+        is_on = self.switch_vars['零秒记录'].get()
         if is_on:
             self.hack.remove_restrictions()
             self.log_info("🛡️ 现在已经允许0秒记录")
