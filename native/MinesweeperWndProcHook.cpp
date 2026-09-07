@@ -121,9 +121,6 @@ ClickResult ExecuteClick(void* cell_pointer) noexcept {
 
         if (game_root == 0 ||
             !IsReadableAddress(
-                reinterpret_cast<void*>(game_root + 0x29),
-                sizeof(std::uint8_t)) ||
-            !IsReadableAddress(
                 reinterpret_cast<void*>(game_root + 0x38),
                 sizeof(std::int32_t))) {
             return ClickResult::InvalidGamePointer;
@@ -137,10 +134,6 @@ ClickResult ExecuteClick(void* cell_pointer) noexcept {
         if (engine_state != 1) {
             return ClickResult::GameNotRunning;
         }
-
-        *reinterpret_cast<std::uint8_t*>(
-            game_root + 0x29
-        ) = 0;
 
         using ClickFunction =
             void(__fastcall*)(void*, void*);
